@@ -9,9 +9,21 @@
 
 template <class KeyViewType>
 struct CustomBinOp1D {
+#ifdef VPIC_DISABLE_DEVICE_FP64
+  // No double precision in device code: bin integer keys exactly when every
+  // key value can have its own bin, and otherwise scale in float.
+  using key_scalar = typename KeyViewType::non_const_value_type;
+  static_assert(std::is_integral_v<key_scalar>,
+                "VPIC_DISABLE_DEVICE_FP64 bins integer keys only");
+  size_t max_bins_ = {};
+  float mul_    = {};
+  key_scalar min_ = {};
+  bool one_bin_per_key_ = false;
+#else
   size_t max_bins_ = {};
   double mul_   = {};
   double min_   = {};
+#endif
 
 #ifdef KOKKOS_ENABLE_DEPRECATED_CODE_4
   KOKKOS_DEPRECATED CustomBinOp1D() = default;
@@ -34,13 +46,23 @@ struct CustomBinOp1D {
         (static_cast<double>(max) - static_cast<double>(min)) <=
             static_cast<double>(max_bins)) {
       mul_ = 1.;
+#ifdef VPIC_DISABLE_DEVICE_FP64
+      one_bin_per_key_ = true;
+#endif
     }
   }
 
   // Determine bin index from key value
   template <class ViewType>
   KOKKOS_INLINE_FUNCTION size_t bin(ViewType& keys, const size_t& i) const {
+#ifdef VPIC_DISABLE_DEVICE_FP64
+    if (one_bin_per_key_) return static_cast<size_t>(keys(i) - min_);
+    // Float rounding keeps the bins in key order but may overshoot the end
+    const size_t b = static_cast<size_t>(mul_ * static_cast<float>(keys(i) - min_));
+    return b < max_bins_ ? b : max_bins_ - 1;
+#else
     return static_cast<size_t>(mul_ * (static_cast<double>(keys(i)) - min_));
+#endif
   }
 
   // Return maximum bin index + 1

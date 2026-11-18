@@ -214,6 +214,9 @@ accumulate_hydro_p_kokkos(
   Kokkos::parallel_for("advance_p", Kokkos::RangePolicy < Kokkos::DefaultExecutionSpace > (0, np),
     KOKKOS_LAMBDA (size_t p_index)
     {
+    // Constants of the precision this kernel has always used (double unless
+    // VPIC_DISABLE_DEVICE_FP64)
+    constexpr k_wide_float_t one = 1, third = one/3, two_fifths = 2*one/5;
 
     // Load the particle
     float dx = k_particles(p_index, particle_var::dx);
@@ -263,14 +266,14 @@ accumulate_hydro_p_kokkos(
     // kinetic energy computation. Note: gamma-1 = |u|^2 / (gamma+1)
     // is the numerically accurate way to compute gamma-1
     float ke_mc = ux*ux + uy*uy + uz*uz; // ke_mc = |u|^2 (invariant)
-    float vz = sqrt(1.0+ke_mc);            // vz = gamma    (invariant)
-    ke_mc *= c/(vz+1.0);             // ke_mc = c|u|^2/(gamma+1) = c*(gamma-1)
+    float vz = Kokkos::sqrt(one+ke_mc);    // vz = gamma    (invariant)
+    ke_mc *= c/(vz+one);             // ke_mc = c|u|^2/(gamma+1) = c*(gamma-1)
     vz = c/vz;                     // vz = c/gamma
     float w0 = qdt_4mc2*vz;
     float w1 = w5*w5 + w6*w6 + w7*w7;    // |cB|^2
     float w2 = w0*w0*w1;
-    float w3 = w0*(1.+(1./3.)*w2*(1.0+0.4*w2));
-    float w4 = w3/(1.+ w1*w3*w3); w4 += w4;
+    float w3 = w0*(one+third*w2*(one+two_fifths*w2));
+    float w4 = w3/(one+ w1*w3*w3); w4 += w4;
 
     // Boris rotation - uprime
     w0 = ux + w3*( uy*w7 - uz*w6 );
@@ -292,18 +295,18 @@ accumulate_hydro_p_kokkos(
     dx *= w0;       // dx = (1/8)(w/V) x
     w1  = w0+dx;    // w1 = (1/8)(w/V) + (1/8)(w/V)x = (1/8)(w/V)(1+x)
     w0 -= dx;       // w0 = (1/8)(w/V) - (1/8)(w/V)x = (1/8)(w/V)(1-x)
-    w3  = 1.0+dy;     // w3 = 1+y
+    w3  = one+dy;     // w3 = 1+y
     w2  = w0*w3;    // w2 = (1/8)(w/V)(1-x)(1+y)
     w3 *= w1;       // w3 = (1/8)(w/V)(1+x)(1+y)
-    dy  = 1.0-dy;     // dy = 1-y
+    dy  = one-dy;     // dy = 1-y
     w0 *= dy;       // w0 = (1/8)(w/V)(1-x)(1-y)
     w1 *= dy;       // w1 = (1/8)(w/V)(1+x)(1-y)
-    w7  = 1.0+dz;     // w7 = 1+z
+    w7  = one+dz;     // w7 = 1+z
     w4  = w0*w7;    // w4 = (1/8)(w/V)(1-x)(1-y)(1+z) = (w/V) trilin_0 *Done
     w5  = w1*w7;    // w5 = (1/8)(w/V)(1+x)(1-y)(1+z) = (w/V) trilin_1 *Done
     w6  = w2*w7;    // w6 = (1/8)(w/V)(1-x)(1+y)(1+z) = (w/V) trilin_2 *Done
     w7 *= w3;       // w7 = (1/8)(w/V)(1+x)(1+y)(1+z) = (w/V) trilin_3 *Done
-    dz  = 1.0-dz;     // dz = 1-z
+    dz  = one-dz;     // dz = 1-z
     w0 *= dz;       // w0 = (1/8)(w/V)(1-x)(1-y)(1-z) = (w/V) trilin_4 *Done
     w1 *= dz;       // w1 = (1/8)(w/V)(1+x)(1-y)(1-z) = (w/V) trilin_5 *Done
     w2 *= dz;       // w2 = (1/8)(w/V)(1-x)(1+y)(1-z) = (w/V) trilin_6 *Done

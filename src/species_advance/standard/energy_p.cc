@@ -131,7 +131,7 @@ energy_p_kernel(const k_interpolator_t& k_interp,
 //  const float msp     = args->msp;
 //  const float one     = 1;
 
-  double en = 0;
+  k_wide_float_t en = 0;
 
   // Determine which particles this pipeline processes
 
@@ -162,7 +162,7 @@ energy_p_kernel(const k_interpolator_t& k_interp,
     en += (double)v0;
   }
 */
-    Kokkos::parallel_reduce(np, KOKKOS_LAMBDA(const size_t n, double& update) {
+    Kokkos::parallel_reduce(np, KOKKOS_LAMBDA(const size_t n, k_wide_float_t& update) {
         float dx = k_particles(n, particle_var::dx);
         float dy = k_particles(n, particle_var::dy);
         float dz = k_particles(n, particle_var::dz);
@@ -175,7 +175,7 @@ energy_p_kernel(const k_interpolator_t& k_interp,
                                                              dy*( k_interp(i, interpolator_var::dezdy) + dx*k_interp(i, interpolator_var::d2ezdxdy) ) );
         v0 = v0*v0 + v1*v1 + v2*v2;
         v0 = (msp * k_particles(n, particle_var::w)) * (v0 / (1 + sqrtf(1 + v0)));
-        update += static_cast<double>(v0);
+        update += static_cast<k_wide_float_t>(v0);
     }, en);
     return en;
 }

@@ -79,6 +79,8 @@ option(VPIC_ENABLE_GPU_AWARE_MPI "Enable GPU aware MPI to speedup communication"
 
 option(VPIC_ENABLE_32BIT_ATOMIC_COUNTERS "Use 32-bit atomic counters, for GPUs without 64-bit atomics (e.g. Apple GPUs)" OFF)
 
+option(VPIC_DISABLE_DEVICE_FP64 "Keep double precision out of device code, for GPUs without FP64 (e.g. Apple GPUs)" OFF)
+
 add_definitions(-DUSE_KOKKOS)
 set(VPIC_CPPFLAGS "${VPIC_CPPFLAGS} -DUSE_KOKKOS") # Set it here for ./deck/ files
 
@@ -461,6 +463,11 @@ if (VPIC_ENABLE_32BIT_ATOMIC_COUNTERS)
   add_definitions(-DVPIC_ENABLE_32BIT_ATOMIC_COUNTERS)
   message("--     VPIC: Enabled 32-bit atomic counters")
 endif(VPIC_ENABLE_32BIT_ATOMIC_COUNTERS)
+
+if (VPIC_DISABLE_DEVICE_FP64)
+  add_definitions(-DVPIC_DISABLE_DEVICE_FP64)
+  message("--     VPIC: Disabled double precision in device code")
+endif(VPIC_DISABLE_DEVICE_FP64)
 
 set(USE_V4)
 if(USE_V4_ALTIVEC)

@@ -44,6 +44,17 @@ using k_atomic_count_t = uint32_t;
 using k_atomic_count_t = size_t;
 #endif
 
+// Floating-point type for the device arithmetic that VPIC does wider than
+// float: the reductions behind the energy and divergence-error diagnostics, and
+// a few moment and boundary averages. Double by default. Some GPUs, such as
+// Apple GPUs, have no double precision at all; building with
+// VPIC_DISABLE_DEVICE_FP64 makes it float, so that device code uses no FP64.
+#ifdef VPIC_DISABLE_DEVICE_FP64
+using k_wide_float_t = float;
+#else
+using k_wide_float_t = double;
+#endif
+
 // TODO: we dont need the [1] here
 using k_counter_t = Kokkos::View<k_atomic_count_t[1]>;
 

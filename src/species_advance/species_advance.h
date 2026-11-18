@@ -507,7 +507,7 @@ move_p_kokkos(
     if(v0<v3) v3=v0, axis=0;
     if(v1<v3) v3=v1, axis=1;
     if(v2<v3) v3=v2, axis=2;
-    v3 *= 0.5;
+    v3 *= 0.5f;
 
     // Compute the midpoint and the normalized displacement of the streak
     s_dispx *= v3;
@@ -757,7 +757,7 @@ move_p_kokkos_host_serial(
     if(v0<v3) v3=v0, axis=0;
     if(v1<v3) v3=v1, axis=1;
     if(v2<v3) v3=v2, axis=2;
-    v3 *= 0.5;
+    v3 *= 0.5f;
 
     // Compute the midpoint and the normalized displacement of the streak
     s_dispx *= v3;

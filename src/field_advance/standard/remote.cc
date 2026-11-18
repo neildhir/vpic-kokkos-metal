@@ -589,45 +589,45 @@ double
 end_recv_tang_e_norm_b(field_array_t* fa) {
 # define END_RECV(i,j,k,X,Y,Z) BEGIN_PRIMITIVE {                               \
     const int face = (i+j+k)<0 ? n##X+1 : 1; /* Average */                     \
-    double X##_face_err = 0.0, Y##Z##_edge_err=0.0, Z##Y##_edge_err=0.0;       \
+    k_wide_float_t X##_face_err = 0.0, Y##Z##_edge_err=0.0, Z##Y##_edge_err=0.0;       \
     Kokkos::MDRangePolicy<Kokkos::Rank<2>> X##_face({1,1}, {n##Y+1,n##Z+1});   \
     Kokkos::parallel_reduce("end_recv_tang_e_norm_b<" #X #Y #Z "> " #X "_face",\
-      X##_face, KOKKOS_LAMBDA(const int Y, const int Z, double& error) {       \
+      X##_face, KOKKOS_LAMBDA(const int Y, const int Z, k_wide_float_t& error) {       \
       const int X = face;                                                      \
       const size_t voxel = VOXEL(x,y,z,nx,ny,nz);                              \
-      const double w1 = rbuf_d((Z-1)*n##Y + (Y-1));                            \
-      const double w2 = kfield(voxel, field_var::cb##X);                       \
-      kfield(voxel, field_var::cb##X) = 0.5*( w1+w2 );                         \
+      const k_wide_float_t w1 = rbuf_d((Z-1)*n##Y + (Y-1));                    \
+      const k_wide_float_t w2 = kfield(voxel, field_var::cb##X);               \
+      kfield(voxel, field_var::cb##X) = k_wide_float_t(0.5)*( w1+w2 );         \
       error += (w1-w2)*(w1-w2);                                                \
     }, X##_face_err);                                                          \
     Kokkos::MDRangePolicy<Kokkos::Rank<2>> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});\
     Kokkos::parallel_reduce("end_recv_tang_e_norm_b<" #X #Y #Z "> " #Y #Z "_edge", \
-      Y##Z##_edge, KOKKOS_LAMBDA(const int Y, const int Z, double& error) {    \
+      Y##Z##_edge, KOKKOS_LAMBDA(const int Y, const int Z, k_wide_float_t& error) {    \
       const int X = face;                                                      \
       const size_t offset = n##Z*n##Y + 2*((Z-1)*n##Y + (Y-1));                \
       const size_t voxel = VOXEL(x,y,z,nx,ny,nz);                              \
-      double w1 = rbuf_d(offset);                                              \
-      double w2 = kfield(voxel, field_var::e##Y);                              \
-      kfield(voxel, field_var::e##Y) = 0.5*( w1+w2 );                          \
+      k_wide_float_t w1 = rbuf_d(offset);                                      \
+      k_wide_float_t w2 = kfield(voxel, field_var::e##Y);                      \
+      kfield(voxel, field_var::e##Y) = k_wide_float_t(0.5)*( w1+w2 );          \
       error += (w1-w2)*(w1-w2);                                                \
       w1 = rbuf_d(offset+1);                                                   \
       w2 = kfield(voxel, field_var::tca##Y);                                   \
-      kfield(voxel, field_var::tca##Y) = 0.5*( w1+w2 );                        \
+      kfield(voxel, field_var::tca##Y) = k_wide_float_t(0.5)*( w1+w2 );        \
     }, Y##Z##_edge_err);                                                       \
     Kokkos::MDRangePolicy<Kokkos::Rank<2>> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});\
     Kokkos::parallel_reduce("end_recv_tang_e_norm_b<" #X #Y #Z "> " #Z #Y "_edge", \
-      Z##Y##_edge, KOKKOS_LAMBDA(const int Y, const int Z, double& error) {    \
+      Z##Y##_edge, KOKKOS_LAMBDA(const int Y, const int Z, k_wide_float_t& error) {    \
       const int X = face;                                                      \
       const size_t offset = n##Z*n##Y + 2*n##Y*(n##Z+1)                        \
                           + 2*((Z-1)*(n##Y+1) + (Y-1));                        \
       const size_t voxel = VOXEL(x,y,z,nx,ny,nz);                              \
-      double w1 = rbuf_d(offset);                                              \
-      double w2 = kfield(voxel, field_var::e##Z);                              \
-      kfield(voxel, field_var::e##Z) = 0.5*( w1+w2 );                          \
+      k_wide_float_t w1 = rbuf_d(offset);                                      \
+      k_wide_float_t w2 = kfield(voxel, field_var::e##Z);                      \
+      kfield(voxel, field_var::e##Z) = k_wide_float_t(0.5)*( w1+w2 );          \
       error += (w1-w2)*(w1-w2);                                                \
       w1 = rbuf_d(offset+1);                                                   \
       w2 = kfield(voxel, field_var::tca##Z);                                   \
-      kfield(voxel, field_var::tca##Z) = 0.5*( w1+w2 );                        \
+      kfield(voxel, field_var::tca##Z) = k_wide_float_t(0.5)*( w1+w2 );        \
     }, Z##Y##_edge_err);                                                       \
     err += X##_face_err + Y##Z##_edge_err + Z##Y##_edge_err;                   \
   } END_PRIMITIVE
