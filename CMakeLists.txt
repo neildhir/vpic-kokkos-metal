@@ -216,6 +216,12 @@ find_package(OpenMP)
 if (OPENMP_FOUND)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
   set(VPIC_CXX_FLAGS "${OpenMP_CXX_FLAGS} ${VPIC_CXX_FLAGS}")
+  # Some compilers keep the OpenMP headers outside their default search path
+  # (e.g. Apple Clang with Homebrew's libomp). Pass them to the deck compile
+  # script too, or decks fail to find omp.h.
+  foreach(dir ${OpenMP_CXX_INCLUDE_DIRS})
+    set(VPIC_CXX_FLAGS "${VPIC_CXX_FLAGS} -I${dir}")
+  endforeach()
   #set (CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${OpenMP_Fortran_FLAGS}")
 else()
   message("OpenMP not found...")
