@@ -226,7 +226,7 @@ void
 species_t::copy_to_device()
 {
 
-  k_nm_h(0) = nm;
+  k_nm_h(0) = static_cast<k_atomic_count_t>(nm);  // nm <= max_nm, which fits (checked at allocation)
 
 #ifdef USE_LEGACY_PARTICLE_ARRAY
   // Avoid capturing this

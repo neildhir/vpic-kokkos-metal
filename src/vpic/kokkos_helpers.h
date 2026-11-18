@@ -32,9 +32,20 @@
 
 typedef int16_t material_id;
 
+// Integer type of the counters that device code updates with atomics: the
+// particle mover count and the particle compaction counters (the particle sort
+// uses the same switch for its bin counts). They are 64-bit by default. Some
+// GPUs, such as Apple GPUs through Metal, have no 64-bit atomics; building with
+// VPIC_ENABLE_32BIT_ATOMIC_COUNTERS makes them 32-bit, which limits the movers
+// per species and process to 2^32-1.
+#ifdef VPIC_ENABLE_32BIT_ATOMIC_COUNTERS
+using k_atomic_count_t = uint32_t;
+#else
+using k_atomic_count_t = size_t;
+#endif
+
 // TODO: we dont need the [1] here
-// TODO: this can likely be unsigned, but that tends to upset Kokkos
-using k_counter_t = Kokkos::View<size_t[1]>;
+using k_counter_t = Kokkos::View<k_atomic_count_t[1]>;
 
 using k_field_t = Kokkos::View<float *[FIELD_VAR_COUNT]>;
 // TODO: This scatter access is needed only for jfxyz, not all field vars.

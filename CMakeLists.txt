@@ -77,6 +77,8 @@ option(VPIC_ENABLE_ACCUMULATORS "Enable explicit accumulators for better perform
 
 option(VPIC_ENABLE_GPU_AWARE_MPI "Enable GPU aware MPI to speedup communication" OFF)
 
+option(VPIC_ENABLE_32BIT_ATOMIC_COUNTERS "Use 32-bit atomic counters, for GPUs without 64-bit atomics (e.g. Apple GPUs)" OFF)
+
 add_definitions(-DUSE_KOKKOS)
 set(VPIC_CPPFLAGS "${VPIC_CPPFLAGS} -DUSE_KOKKOS") # Set it here for ./deck/ files
 
@@ -454,6 +456,11 @@ if (VPIC_ENABLE_GPU_AWARE_MPI)
   add_definitions(-DVPIC_ENABLE_GPU_AWARE_MPI)
   message("--     VPIC: Enabled GPU-aware MPI")
 endif(VPIC_ENABLE_GPU_AWARE_MPI)
+
+if (VPIC_ENABLE_32BIT_ATOMIC_COUNTERS)
+  add_definitions(-DVPIC_ENABLE_32BIT_ATOMIC_COUNTERS)
+  message("--     VPIC: Enabled 32-bit atomic counters")
+endif(VPIC_ENABLE_32BIT_ATOMIC_COUNTERS)
 
 set(USE_V4)
 if(USE_V4_ALTIVEC)

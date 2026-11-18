@@ -3,7 +3,9 @@
 
 #include <Kokkos_Core.hpp>
 #include <algorithm>
+#include <cstdint>
 #include <iostream>
+#include <limits>
 
 template <class KeyViewType>
 struct CustomBinOp1D {
@@ -167,8 +169,16 @@ class CustomBinSort {
   using size_type  = size_t; //SizeType;
   using value_type = size_type;
 
+  // Bin counts are updated with atomics. Some GPUs, such as Apple GPUs through
+  // Metal, have no 64-bit atomics, so VPIC_ENABLE_32BIT_ATOMIC_COUNTERS makes
+  // them 32-bit. Offsets and the permutation always stay 64-bit.
+#ifdef VPIC_ENABLE_32BIT_ATOMIC_COUNTERS
+  using bin_count_scalar = uint32_t;
+#else
+  using bin_count_scalar = size_t;
+#endif
   using offset_type    = Kokkos::View<size_type*, Space>;
-  using bin_count_type = Kokkos::View<const size_t*, Space>;
+  using bin_count_type = Kokkos::View<const bin_count_scalar*, Space>;
 
   using const_key_view_type = typename KeyViewType::const_type;
 
@@ -187,7 +197,7 @@ class CustomBinSort {
   using const_key_scalar     = typename KeyViewType::const_value_type;
 
   using bin_count_atomic_type =
-      Kokkos::View<size_t*, Space, Kokkos::MemoryTraits<Kokkos::Atomic> >;
+      Kokkos::View<bin_count_scalar*, Space, Kokkos::MemoryTraits<Kokkos::Atomic> >;
 
  private:
   const_key_view_type keys;
@@ -236,7 +246,7 @@ class CustomBinSort {
     if (bin_op.max_bins() <= 0)
       Kokkos::abort(
           "The number of bins in the BinSortOp object must be greater than 0!");
-    bin_count_atomic = Kokkos::View<size_t*, Space>(
+    bin_count_atomic = Kokkos::View<bin_count_scalar*, Space>(
         "Kokkos::SortImpl::CustomBinSortFunctor::bin_count", bin_op.max_bins());
     bin_count_const = bin_count_atomic;
     bin_offsets =
@@ -312,6 +322,13 @@ class CustomBinSort {
         "CustomBinSort was initialized with!");
 
     const size_t len = range_end - range_begin;
+    // With 32-bit bin counts, a single bin could in principle overflow if more
+    // than 2^32-1 elements are sorted at once.
+    if constexpr (sizeof(bin_count_scalar) < sizeof(size_t)) {
+      if (len > std::numeric_limits<bin_count_scalar>::max())
+        Kokkos::abort("CustomBinSort: too many elements for 32-bit bin counts "
+                      "(VPIC_ENABLE_32BIT_ATOMIC_COUNTERS)");
+    }
     Kokkos::parallel_for(
         "Kokkos::Sort::BinCount",
         Kokkos::RangePolicy<ExecutionSpace, bin_count_tag>(exec, 0, len),

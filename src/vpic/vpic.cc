@@ -264,12 +264,12 @@ void restore_kokkos(vpic_simulation& simulation, const char * fbase)
         new(&sp->k_pm_h) k_particle_movers_t::host_mirror_type();
         new(&sp->k_pm_i_h) k_particle_i_movers_t::host_mirror_type();
 
-        new(&sp->unsafe_index) Kokkos::View<int*>();
-        new(&sp->clean_up_to_count) Kokkos::View<int>();
-        new(&sp->clean_up_from_count) Kokkos::View<int>();
-        new(&sp->clean_up_from_count_h) Kokkos::View<int>::host_mirror_type();
-        new(&sp->clean_up_from) Kokkos::View<int*>();
-        new(&sp->clean_up_to) Kokkos::View<int*>();
+        new(&sp->unsafe_index) decltype(sp->unsafe_index)();
+        new(&sp->clean_up_to_count) decltype(sp->clean_up_to_count)();
+        new(&sp->clean_up_from_count) decltype(sp->clean_up_from_count)();
+        new(&sp->clean_up_from_count_h) decltype(sp->clean_up_from_count_h)();
+        new(&sp->clean_up_from) decltype(sp->clean_up_from)();
+        new(&sp->clean_up_to) decltype(sp->clean_up_to)();
 
         sp->init_kokkos_particles();
 
