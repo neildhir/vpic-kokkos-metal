@@ -1,0 +1,224 @@
+// Benchmark deck: magnetic reconnection in a Harris current sheet.
+//
+// Adapted from build/bench/harris_bench.deck (itself from Kevin Bowers'
+// Harris deck after Daughton, Phys. Plasmas 9, 3668 (2002)) for the
+// benchmarks/ harness. Same equilibrium, mass ratio, units and time step.
+// Differences from the template, all so that every build and every
+// MPI/thread layout computes the same physics:
+//
+// - Particles are loaded from a counter-based hash (splitmix64) of the
+//   global pair index instead of VPIC's per-rank RNG streams, which are
+//   seeded with the rank. The initial state is therefore identical for any
+//   rank count, and runs at different layouts (or a 1-rank GPU run against
+//   an 8-rank CPU run) differ only by floating-point summation order.
+//   Pairs are stratified in y (pair k sits in [k, k+1) * Ly / Npairs) so
+//   that each rank's slab of y owns a contiguous range of pair indices.
+// - Both species are sorted every SORT_INTERVAL steps (the template sorted
+//   ions every 40), so that the steady-state half of the run samples the
+//   full sorting cadence.
+// - Energies are written every nstep/4 steps to ./energies for the
+//   harness's physics check; all other dumps stay off.
+//
+// Usage: <deck>.Darwin --tpp <threads> nx ny nz nppc nstep
+//   nppc counts both species together; ny and the number of particle pairs
+//   (nppc*nx*ny*nz/2) must divide by the number of ranks; nstep must be a
+//   multiple of 2*SORT_INTERVAL. The status interval is nstep/2, so the
+//   second timing table VPIC prints covers the steady second half.
+
+#define SORT_INTERVAL 20
+
+// splitmix64 finaliser: a strong 64-bit mixer, used as a counter-based RNG.
+static inline uint64_t bench_mix64( uint64_t z ) {
+  z += 0x9e3779b97f4a7c15ULL;
+  z = ( z ^ ( z >> 30 ) ) * 0xbf58476d1ce4e5b9ULL;
+  z = ( z ^ ( z >> 27 ) ) * 0x94d049bb133111ebULL;
+  return z ^ ( z >> 31 );
+}
+
+// Uniform deviate on the open interval (0,1) for draw j of pair k.
+static inline double bench_uniform( uint64_t k, int j ) {
+  const uint64_t h = bench_mix64( bench_mix64( k ) ^ ( 0x5bd1e995ULL + (uint64_t)j ) );
+  return ( (double)( h >> 11 ) + 0.5 ) * ( 1.0 / 9007199254740992.0 );
+}
+
+begin_globals {
+  double energies_interval;
+};
+
+begin_initialization {
+
+  double input_mass_ratio = 25.0;
+  if( num_cmdline_arguments!=6 ) ERROR(( "Usage: %s nx ny nz nppc nstep", cmdline_argument[0] ));
+  const double arg_nx    = atof(cmdline_argument[1]);
+  const double arg_ny    = atof(cmdline_argument[2]);
+  const double arg_nz    = atof(cmdline_argument[3]);
+  const double arg_nppc  = atof(cmdline_argument[4]);
+  const int    arg_nstep = atoi(cmdline_argument[5]);
+  seed_entropy( 0 ); // unused for loading; kept for any library-side draws
+
+  sim_log( "Computing simulation parameters");
+
+  // Units (natural)
+  double L    = 1; // Length normalization (sheet thickness)
+  double ec   = 1; // Charge normalization
+  double me   = 1; // Mass normalization
+  double c    = 1; // Speed of light
+  double eps0 = 1; // Permittivity of space
+
+  // Physics parameters
+  double mi_me   = input_mass_ratio; // Ion mass / electron mass
+  double rhoi_L  = 1;    // Ion thermal gyroradius / Sheet thickness
+  double Ti_Te   = 1;    // Ion temperature / electron temperature
+  double wpe_wce = 3;    // Electron plasma freq / electron cycltron freq
+  double theta   = 0;    // Orientation of the simulation wrt current sheet
+
+  // Numerical parameters
+  double Lx        = 16*L;
+  double Ly        = 16*L;
+  double Lz        = 16*L;
+  double nx        = arg_nx;
+  double ny        = arg_ny;
+  double nz        = arg_nz;
+  double nppc      = arg_nppc;  // macro particles per cell, both species combined
+  double cfl_req   = 0.99;
+  double wpedt_max = 0.36;
+  double damp      = 0.001;
+
+  // Derived quantities
+  double mi   = me*mi_me;
+  double kTe  = me*c*c/(2*wpe_wce*wpe_wce*(1+Ti_Te));
+  double kTi  = kTe*Ti_Te;
+  double vthe = sqrt(2*kTe/me);
+  double vthi = sqrt(2*kTi/mi);
+  double wci  = vthi/(rhoi_L*L);
+  double wce  = wci*mi_me;
+  double wpe  = wce*wpe_wce;
+  double wpi  = wpe/sqrt(mi_me);
+  double vdre = c*c*wce/(wpe*wpe*L*(1+Ti_Te));
+  double vdri = -Ti_Te*vdre;
+  double b0   = me*wce/ec;
+  double n0   = me*eps0*wpe*wpe/(ec*ec);
+  double Npe  = 2*n0*Ly*Lz*L*tanh(0.5*Lx/L);
+  double Npi  = Npe;
+  double Ne   = 0.5*nppc*nx*ny*nz;   // macro electrons = macro ions = pairs
+  double Ni   = Ne;
+  double we   = Npe/Ne;
+  double wi   = Npi/Ni;
+  double gdri = 1/sqrt(1-vdri*vdri/(c*c));
+  double gdre = 1/sqrt(1-vdre*vdre/(c*c));
+  double udri = vdri*gdri;
+  double udre = vdre*gdre;
+  double uthi = sqrt(kTi/mi)/c;
+  double uthe = sqrt(kTe/me)/c;
+  double cs   = cos(theta);
+  double sn   = sin(theta);
+
+  const int64_t npair = (int64_t)Ne;
+  if( (double)npair!=Ne || npair%nproc()!=0 )
+    ERROR(( "nppc*nx*ny*nz/2 = %g pairs must be an integer divisible by %i ranks", Ne, nproc() ));
+  if( ((int64_t)ny)%nproc()!=0 )
+    ERROR(( "ny = %g must be divisible by %i ranks", ny, nproc() ));
+  if( arg_nstep<=0 || arg_nstep%(2*SORT_INTERVAL)!=0 )
+    ERROR(( "nstep = %i must be a positive multiple of %i", arg_nstep, 2*SORT_INTERVAL ));
+
+  double dg = courant_length(Lx,Ly,Lz,nx,ny,nz);
+  double dt = cfl_req*dg/c;
+  if( wpe*dt>wpedt_max ) dt=wpedt_max/wpe;
+
+  num_step             = arg_nstep;
+  status_interval      = arg_nstep/2;
+  sync_shared_interval = status_interval;
+  clean_div_e_interval = status_interval;
+  clean_div_b_interval = status_interval;
+
+  global->energies_interval = arg_nstep/4>0 ? arg_nstep/4 : 1;
+
+  define_units( c, eps0 );
+  define_timestep( dt );
+
+  // Periodic box sliced uniformly along y; conducting, reflecting x walls
+  define_periodic_grid( -0.5*Lx, 0, 0,
+                         0.5*Lx, Ly, Lz,
+                         nx, ny, nz,
+                         1, nproc(), 1 );
+  set_domain_field_bc( BOUNDARY(-1,0,0), pec_fields );
+  set_domain_field_bc( BOUNDARY( 1,0,0), pec_fields );
+  set_domain_particle_bc( BOUNDARY(-1,0,0), reflect_particles );
+  set_domain_particle_bc( BOUNDARY( 1,0,0), reflect_particles );
+
+  define_material( "vacuum", 1 );
+  define_field_array( NULL, damp );
+
+  // 50% headroom on local particles; out-of-place sorting for both species
+  species_t * ion      = define_species( "ion",       ec, mi, 1.5*Ni/nproc(), -1, SORT_INTERVAL, 1 );
+  species_t * electron = define_species( "electron", -ec, me, 1.5*Ne/nproc(), -1, SORT_INTERVAL, 1 );
+
+  sim_log( "num_step = " << num_step );
+  sim_log( "dt = " << dt );
+  sim_log( "nx = " << nx << ", ny = " << ny << ", nz = " << nz );
+  sim_log( "nppc = " << nppc );
+  sim_log( "courant = " << c*dt/dg );
+  sim_log( "Ni = " << Ni << ", Ne = " << Ne );
+  sim_log( "nptotal = " << Ni + Ne );
+  sim_log( "nproc = " << nproc() );
+
+  sim_log( "Loading fields" );
+  set_region_field( everywhere, 0, 0, 0,
+                    0, -sn*b0*tanh(x/L), cs*b0*tanh(x/L) );
+
+  sim_log( "Loading particles" );
+  const double ymin = rank()*Ly/nproc(), ymax = (rank()+1)*Ly/nproc();
+  const double ymax_in = nextafter( ymax, ymin );
+  const double tx = tanh( 0.5*Lx/L );
+  const double two_pi = 2*M_PI;
+  const int64_t pair_lo = rank()*(npair/nproc()), pair_hi = pair_lo + npair/nproc();
+  for( int64_t k=pair_lo; k<pair_hi; k++ ) {
+    const uint64_t kk = (uint64_t)k;
+    // x from the inverse CDF of the sech^2 profile, truncated to the box
+    double x = L*atanh( tx*( 2*bench_uniform( kk, 0 ) - 1 ) );
+    double y = Ly*( (double)k + bench_uniform( kk, 1 ) )/Ne;
+    if( y<ymin ) y = ymin;
+    if( y>ymax_in ) y = ymax_in;
+    double z = Lz*bench_uniform( kk, 2 );
+
+    // Six standard normals from three Box-Muller pairs
+    double g[6];
+    for( int p=0; p<3; p++ ) {
+      const double r = sqrt( -2*log( bench_uniform( kk, 3+2*p ) ) );
+      const double a = two_pi*bench_uniform( kk, 4+2*p );
+      g[2*p] = r*cos(a); g[2*p+1] = r*sin(a);
+    }
+
+    // Ion: isothermal in the drift frame, boosted, rotated into the lab
+    double ux = uthi*g[0], uy = uthi*g[1], uz = uthi*g[2];
+    double d0 = gdri*uy + sqrt(ux*ux+uy*uy+uz*uz+1)*udri;
+    uy = d0*cs - uz*sn;
+    uz = d0*sn + uz*cs;
+    inject_particle( ion,      x, y, z, ux, uy, uz, wi, 0, 0 );
+
+    // Electron at the same position
+    ux = uthe*g[3]; uy = uthe*g[4]; uz = uthe*g[5];
+    d0 = gdre*uy + sqrt(ux*ux+uy*uy+uz*uz+1)*udre;
+    uy = d0*cs - uz*sn;
+    uz = d0*sn + uz*cs;
+    inject_particle( electron, x, y, z, ux, uy, uz, we, 0, 0 );
+  }
+}
+
+begin_diagnostics {
+  if( global->energies_interval>0 &&
+      remainder( step(), global->energies_interval )==0 )
+    dump_energies( "energies", step()==0 ? 0 : 1 );
+}
+
+begin_particle_injection {
+}
+
+begin_current_injection {
+}
+
+begin_field_injection {
+}
+
+begin_particle_collisions {
+}

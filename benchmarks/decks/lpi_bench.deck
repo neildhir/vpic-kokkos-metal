@@ -1,0 +1,451 @@
+//========================================================================
+// Benchmark deck: laser-plasma interaction (LPI), adapted for benchmarks/
+// from sample/benchmark.cxx (Scott V. Luedtke, XCP-6, 1/7/21):
+//
+//   "LPI test deck based on SBS single speckle simulations from Albright,
+//   Yin, Bowers, and Bergen, Physics of Plasmas, 2016. Results from a
+//   version of this deck are reported in Bird, Tan, Luedtke, Harrell,
+//   Taufer, and Albright, IEEE Transactions on Parallel and Distributed
+//   Systems, 2021."
+//
+// Kept from the original: SI-derived code units, the box (2.67 x 1.33 x
+// 1.33 um, laser focus at the box centre), uniform electron + I2 plasma at
+// 0.05 n_crit with T_e = 600 eV and T_i = 150 eV, I2 with A = 7 and Z = 14
+// as in the original, the 3D Gaussian 527 nm beam (2.5e20 W/m^2, 4 um
+// waist) injected at the x = xmin boundary with the original Kokkos field
+// injection and linear-ramp pulse (shape 4), the absorbing-field grid with
+// reflecting particles, the 2-cell reflecting "impermeable vacuum" layer at
+// every face, cfl 0.98, no damping, divergence cleaning and shared-face
+// synchronisation every 100 steps, and the species' allocation factors.
+//
+// Changed for benchmarking:
+// - Grid (nx ny nz), total macro particle count, step count and sort
+//   interval come from the command line; the box stays the same, so the
+//   grid sets the resolution.
+// - The MPI topology is derived from nproc() (prime factors assigned, in
+//   increasing order, to the dimension with the most local cells that the
+//   factor divides; benchmarks/bench_config.py mirrors this rule).
+// - Particles are loaded from a counter-based hash (splitmix64) of the
+//   global pair index instead of VPIC's rank-seeded RNG streams. Every rank
+//   draws every pair's position and keeps the pairs whose global cell it
+//   owns, so the initial state is identical for any rank count. Positions
+//   are drawn uniformly in the region outside the impermeable-vacuum layer
+//   (the original drew in the whole box and rejected draws in the layer;
+//   the distribution is the same) and the macro-particle weight is set so
+//   that the density there is n_e, as in the original.
+// - The laser ramp (pulse shape 4) rises over LPI_RAMP_STEPS = 1000 steps,
+//   the original num_step, so a short run reproduces the start of the
+//   original run instead of ramping to full power within the benchmark.
+// - Status every nstep/2 steps (the second timing table is steady state);
+//   energies written to ./energies every nstep/4 steps; no other output.
+// - Removed: params.txt, all field/hydro/particle dump set-up and dumps
+//   (DumpParameters, global_header, mkdirs), restart and quota
+//   checkpointing (turnstiles), DIAG_LOG, the unused density-profile
+//   helpers (density_func, slab, envelope_flattop), the disabled I1 (proton)
+//   species, the #if 0 plane-wave and alternative pulse/polarisation
+//   blocks, and commented-out code.
+//
+// Usage: <deck>.Darwin --tpp <threads> nx ny nz particles nstep sort_interval
+//   particles = total macro particles (electrons + I2 ions, one of each per
+//   pair; must be even); sort_interval 0 disables sorting; nstep must be a
+//   positive multiple of 4.
+//========================================================================
+
+#define LPI_RAMP_STEPS 1000  // pulse shape 4 ramp length [steps]; the original num_step
+#define LPI_RNG_SEED 9818272ULL
+
+// splitmix64 finaliser: a strong 64-bit mixer, used as a counter-based RNG.
+static inline uint64_t bench_mix64( uint64_t z ) {
+  z += 0x9e3779b97f4a7c15ULL;
+  z = ( z ^ ( z >> 30 ) ) * 0xbf58476d1ce4e5b9ULL;
+  z = ( z ^ ( z >> 27 ) ) * 0x94d049bb133111ebULL;
+  return z ^ ( z >> 31 );
+}
+
+// Uniform deviate on the open interval (0,1) for draw j of pair k.
+static inline double bench_uniform( uint64_t k, int j ) {
+  const uint64_t h = bench_mix64( bench_mix64( k ^ LPI_RNG_SEED ) ^ ( 0x5bd1e995ULL + (uint64_t)j ) );
+  return ( (double)( h >> 11 ) + 0.5 ) * ( 1.0 / 9007199254740992.0 );
+}
+
+begin_globals {
+  double emax;                   // E0 of the laser
+  double omega_0;                // laser frequency, code units
+  int    energies_interval;      // how frequently to dump energies
+  int    launch_wave;            // whether to propagate a laser from the y-z boundary
+
+  double xmin,xmax,ymin,ymax,zmin,zmax; // Global geometry
+
+  // Parameters for 3d Gaussian wave launch
+  double lambda;
+  double waist;                  // how wide the focused beam is
+  double width;
+  double zcenter;                // center of beam at boundary in z
+  double ycenter;                // center of beam at boundary in y
+  double xfocus;                 // how far from boundary to focus
+  double mask;                   // # gaussian widths from beam center where I nonzero
+
+  int    pulse_shape;            // 4: linear ramp over LPI_RAMP_STEPS
+  double pulse_FWHM;
+  double pulse_start;
+};
+
+begin_initialization {
+  if( num_cmdline_arguments!=7 )
+    ERROR(( "Usage: %s nx ny nz particles nstep sort_interval", cmdline_argument[0] ));
+  const int     arg_nx        = atoi(cmdline_argument[1]);
+  const int     arg_ny        = atoi(cmdline_argument[2]);
+  const int     arg_nz        = atoi(cmdline_argument[3]);
+  const int64_t arg_particles = atoll(cmdline_argument[4]);
+  const int     arg_nstep     = atoi(cmdline_argument[5]);
+  const int     arg_sort      = atoi(cmdline_argument[6]);
+  if( arg_nx<1 || arg_ny<1 || arg_nz<1 ) ERROR(( "nx, ny, nz must be positive" ));
+  if( arg_particles<2 || arg_particles%2 ) ERROR(( "particles = %lld must be even and positive", (long long)arg_particles ));
+  if( arg_nstep<=0 || arg_nstep%4 ) ERROR(( "nstep = %i must be a positive multiple of 4", arg_nstep ));
+  if( arg_sort<0 ) ERROR(( "sort_interval must be >= 0 (0 disables sorting)" ));
+
+  // Units: SI constants (exact ones exact)
+#define h_SI (6.62607015e-34) /* J s */
+#define e_SI (1.602176634e-19) /* C */
+#define k_B_SI (1.380649e-23) /* J / K */
+#define c_SI (2.99792458e8) /* m / s */
+#define fine_structure (7.2973525693e-3) /* Unitless, true in all unit systems*/
+#define m_e_SI (9.1093837015e-31) /* kg */
+
+  double eps0_SI = e_SI*e_SI/(2.*fine_structure*h_SI*c_SI);
+  double hbar_SI = h_SI/(2.*M_PI);
+
+  // Code units
+  double e_c = 1;
+  double c_c = 1;
+  double eps0_c = 1;
+  double m_e_c = 1;
+  double charge_to_SI = e_SI/e_c;
+  double mass_to_SI = m_e_SI/m_e_c;
+  double hbar_c = e_c*e_c/(4.*M_PI*eps0_c*c_c*fine_structure);
+  double length_c = hbar_c/(m_e_c*c_c);
+  double length_SI = hbar_SI/(m_e_SI*c_SI);
+  double length_to_SI = length_SI/length_c;
+  double time_c = hbar_c/(m_e_c*c_c*c_c);
+  double time_SI = hbar_SI/(m_e_SI*c_SI*c_SI);
+  double time_to_SI = time_SI/time_c;
+  double E_to_SI = mass_to_SI*length_to_SI/(pow(time_to_SI,2)*charge_to_SI);
+
+  // Physical parameters
+  double n_e_over_n_crit    = 0.05;       // n_e/n_crit in solid slab
+  double laser_intensity_SI = 2.5e20;     // units of W/m^2
+  double lambda_SI          = 527e-9;
+  double w0_SI              = 4e-6;       // Beam waist
+
+  double Lx_SI         = (80e-6/60.)*2.; // Simulation box size
+  double Ly_SI         = (20e-6/15.)*1.;
+  double Lz_SI         = (20e-6/15.)*1.;
+  double t_stop = (80e-6/2.)/c_SI / time_to_SI; // original run time (sets pulse_start only)
+
+  double T_e = 600. * e_SI; // k_B*T; e_SI converts eV to J
+  double T_i = 150. * e_SI;
+
+  double dist_to_focus = Lx_SI/2.; // origin at the focus
+
+  // Simulation parameters (floating point to avoid casts)
+  double nx = arg_nx;
+  double ny = arg_ny;
+  double nz = arg_nz;
+  const int64_t npair = arg_particles/2; // one electron and one I2 ion per pair
+
+  double iv_thick = 2;   // Thickness of impermeable vacuum (in cells)
+  double cfl_req = 0.98; // How close to Courant should we try to run
+  double damp    = 0.0;  // Level of radiation damping
+
+  int launch_wave = 1;   // whether or not to launch wave from y-z plane
+
+  // Derived quantities
+  double omega_L_SI = 2.*M_PI*c_SI/lambda_SI;
+  double ncr_SI = pow(omega_L_SI,2)*eps0_SI*m_e_SI/pow(e_SI,2);
+  double wpe_SI = sqrt(n_e_over_n_crit*ncr_SI*pow(e_SI,2)/(eps0_SI*m_e_SI));
+  double skin_depth_SI = c_SI/wpe_SI;
+  double n_e_SI = n_e_over_n_crit*ncr_SI;
+  double debye_SI = sqrt(eps0_SI*T_e/(n_e_SI*e_SI*e_SI));
+
+#define mp_me 1836.15267343
+  double A_I2 = 7;
+  double Z_I2 = 14;
+  double m_I2_SI = A_I2*mp_me*m_e_SI;
+  double m_I2_c = m_I2_SI/mass_to_SI;
+
+  double c2 = c_SI*c_SI;
+  // In 3 dimensions, the average energy is 3 halves the temperature
+  double E_e = T_e*1.5;
+  double E_i = T_i*1.5;
+  // Relativistically corrected average momentum in each dimension
+  double px_e_SI = sqrt(1./3.)*sqrt(E_e*E_e+2.*E_e*m_e_SI*c2)/c_SI;
+  double px_I2_SI = sqrt(1./3.)*sqrt(E_i*E_i+2.*E_i*m_I2_SI*c2)/c_SI;
+  // VPIC uses normalized momentum
+  double px_e_norm = px_e_SI/(m_e_SI*c_SI);
+  double px_I2_norm = px_I2_SI/(m_I2_SI*c_SI);
+
+  double dx = Lx_SI/nx / length_to_SI;
+  double dy = Ly_SI/ny / length_to_SI;
+  double dz = Lz_SI/nz / length_to_SI;
+  double Lx = nx*dx;
+  double Ly = ny*dy;
+  double Lz = nz*dz;
+
+  global->xmin = -dist_to_focus / length_to_SI;
+  global->xmax = global->xmin + Lx;
+  global->ymin = -.5*Ly;
+  global->ymax = global->ymin + Ly;
+  global->zmin = -.5*Lz;
+  global->zmax = global->zmin + Lz;
+
+  double dt = cfl_req*courant_length(Lx, Ly, Lz, nx, ny, nz);
+
+  // Laser parameters
+  int pulse_shape = 4;                       // linear ramp
+  double pulse_FWHM = 300e-15 / time_to_SI;  // unused by shape 4
+  double pulse_start = t_stop/6.;            // unused by shape 4
+  double lambda    = lambda_SI / length_to_SI;
+  double xfocus    = dist_to_focus / length_to_SI;
+  double waist     = w0_SI / length_to_SI;
+  double ycenter   = 0;
+  double zcenter   = 0;
+  double mask      = 2.8;
+  double Rayleigh = M_PI*waist*waist/lambda;
+  double width = waist*sqrt(1.+pow(xfocus/Rayleigh,2));
+  double omega_0 = omega_L_SI * time_to_SI;
+  double emax = sqrt(2.*laser_intensity_SI/(c_SI*eps0_SI)) / E_to_SI;
+  emax = emax*(waist/width); // at entrance, 3D Gaussian
+
+  // Topology from nproc(): prime factors, smallest first, each to the
+  // dimension with the most local cells that the factor divides.
+  int topo[3] = { 1, 1, 1 };
+  const int ncell[3] = { arg_nx, arg_ny, arg_nz };
+  {
+    int rem = nproc();
+    int f = 2;
+    while( rem>1 ) {
+      if( rem%f ) { f++; continue; }
+      int best = -1;
+      for( int d=0; d<3; d++ ) {
+        if( ncell[d]%(topo[d]*f) ) continue;
+        if( best<0 || (int64_t)ncell[d]*topo[best] > (int64_t)ncell[best]*topo[d] ) best = d;
+      }
+      if( best<0 ) ERROR(( "cannot decompose %ix%ix%i cells over %i ranks", arg_nx, arg_ny, arg_nz, nproc() ));
+      topo[best] *= f;
+      rem /= f;
+    }
+  }
+
+  // Interior (outside the impermeable vacuum layer), where particles live
+  const double ix0 = global->xmin + dx*iv_thick, ix1 = global->xmax - dx*iv_thick;
+  const double iy0 = global->ymin + dy*iv_thick, iy1 = global->ymax - dy*iv_thick;
+  const double iz0 = global->zmin + dz*iv_thick, iz1 = global->zmax - dz*iv_thick;
+  if( ix1<=ix0 || iy1<=iy0 || iz1<=iz0 ) ERROR(( "grid too small for the %g-cell vacuum layer", iv_thick ));
+  // Weight per macro electron: density n_e in the interior, as in the original
+  const double interior_SI = (ix1-ix0)*(iy1-iy0)*(iz1-iz0)*pow(length_to_SI,3);
+  const double we = n_e_SI*interior_SI/(double)npair;
+  const double wi = we/Z_I2;  // I2 macro ions: charge Z_I2, weight we/Z_I2 (neutral pairs)
+
+  num_step             = arg_nstep;
+  status_interval      = arg_nstep/2;
+  sync_shared_interval = 100;
+  clean_div_e_interval = 100;
+  clean_div_b_interval = 100;
+  verbose = 0;
+  kokkos_field_injection = true;
+  field_injection_interval = 1;
+  particle_injection_interval = -1;
+  current_injection_interval = -1;
+
+  global->energies_interval = arg_nstep/4;
+  global->emax        = emax;
+  global->omega_0     = omega_0;
+  global->launch_wave = launch_wave;
+  global->lambda      = lambda;
+  global->waist       = waist;
+  global->width       = width;
+  global->mask        = mask;
+  global->xfocus      = xfocus;
+  global->ycenter     = ycenter;
+  global->zcenter     = zcenter;
+  global->pulse_shape = pulse_shape;
+  global->pulse_FWHM  = pulse_FWHM;
+  global->pulse_start = pulse_start;
+
+  sim_log("***** Simulation parameters *****");
+  sim_log("* Processors, topology:          "<<nproc()<<" = "<<topo[0]<<"x"<<topo[1]<<"x"<<topo[2]);
+  sim_log("* Time step (SI), nsteps =       "<<dt*time_to_SI<<" "<<arg_nstep);
+  sim_log("* Debye length (SI) =            "<<debye_SI);
+  sim_log("* Electron skin depth (SI) =     "<<skin_depth_SI);
+  sim_log("* dx, dy, dz (SI) =              "<<dx*length_to_SI<<" "<<dy*length_to_SI<<" "<<dz*length_to_SI);
+  sim_log("* Field points per Debye =       "<<debye_SI/(dx*length_to_SI)<<" "<<debye_SI/(dy*length_to_SI)
+          <<" "<<debye_SI/(dz*length_to_SI));
+  sim_log("* Field points per wavelength =  "<<lambda/dx<<" "<<lambda/dy<<" "<<lambda/dz);
+  sim_log("* nx, ny, nz =                   "<<nx<<" "<<ny<<" "<<nz);
+  sim_log("* Physical/macro electron =      "<<we);
+  sim_log("* Sort interval =                "<<arg_sort);
+  sim_log("* emax at entrance, waist:       "<<emax<<" "<<waist);
+  sim_log("nptotal = "<<2*npair);
+  sim_log("num_step = "<<arg_nstep);
+
+  // Grid: absorbing fields, reflecting particles on the outer boundary
+  grid->dx = dx;
+  grid->dy = dy;
+  grid->dz = dz;
+  grid->dt = dt;
+  grid->cvac = c_c;
+  grid->eps0 = eps0_c;
+  define_absorbing_grid( global->xmin,global->ymin,global->zmin,
+                         global->xmax,global->ymax,global->zmax,
+                         nx, ny, nz,
+                         topo[0], topo[1], topo[2],
+                         reflect_particles );
+
+  // Global cell range owned by this rank
+  const int ox = (int)lround( ((double)grid->x0 - global->xmin)/dx );
+  const int oy = (int)lround( ((double)grid->y0 - global->ymin)/dy );
+  const int oz = (int)lround( ((double)grid->z0 - global->zmin)/dz );
+  auto owns = [&]( double x, double y, double z ) {
+    const int gx = std::min( std::max( (int)floor( (x - global->xmin)/dx ), 0 ), arg_nx-1 );
+    const int gy = std::min( std::max( (int)floor( (y - global->ymin)/dy ), 0 ), arg_ny-1 );
+    const int gz = std::min( std::max( (int)floor( (z - global->zmin)/dz ), 0 ), arg_nz-1 );
+    return gx>=ox && gx<ox+grid->nx && gy>=oy && gy<oy+grid->ny && gz>=oz && gz<oz+grid->nz;
+  };
+  auto position = [&]( uint64_t k, double & x, double & y, double & z ) {
+    x = ix0 + (ix1-ix0)*bench_uniform( k, 0 );
+    y = iy0 + (iy1-iy0)*bench_uniform( k, 1 );
+    z = iz0 + (iz1-iz0)*bench_uniform( k, 2 );
+  };
+
+  // Count local pairs first, so the particle arrays fit whatever the topology
+  int64_t nlocal = 0;
+  for( int64_t k=0; k<npair; k++ ) {
+    double x, y, z;
+    position( (uint64_t)k, x, y, z );
+    if( owns( x, y, z ) ) nlocal++;
+  }
+
+  // Species: the original's 1.3x over-allocation and movers at 1/10 of it
+  double over_alloc_fac = 1.3;
+  double max_local_np = over_alloc_fac*std::max( (double)npair/nproc(), (double)nlocal );
+  double max_local_nm = max_local_np / 10.0;
+  species_t * electron = define_species( "electron", -1.*e_c, m_e_c, max_local_np, max_local_nm, arg_sort, 0 );
+  species_t * ion_I2   = define_species( "I2", Z_I2*e_c, m_I2_c, max_local_np, max_local_nm, arg_sort, 0 );
+
+  define_material( "vacuum", 1 );
+  define_field_array( NULL, damp );
+
+  // All boundaries are impermeable vacuum: reflect particles in the layer
+# define iv_region ( x<global->xmin + dx*iv_thick || x>global->xmax-dx*iv_thick \
+        || y<global->ymin+dy*iv_thick || y>global->ymax-dy*iv_thick  \
+        || z<global->zmin+dz*iv_thick || z>global->zmax-dz*iv_thick )
+  set_region_bc( iv_region, reflect_particles, reflect_particles, reflect_particles );
+
+  sim_log( "Loading particles" );
+  // Clamp into this rank's domain so ulp-level differences between the
+  // global cell grid and the rank's float corners never drop a particle.
+  const double lx0 = grid->x0, lx1 = nextafter( (double)grid->x1, lx0 );
+  const double ly0 = grid->y0, ly1 = nextafter( (double)grid->y1, ly0 );
+  const double lz0 = grid->z0, lz1 = nextafter( (double)grid->z1, lz0 );
+  const double two_pi = 2*M_PI;
+  for( int64_t k=0; k<npair; k++ ) {
+    const uint64_t kk = (uint64_t)k;
+    double x, y, z;
+    position( kk, x, y, z );
+    if( !owns( x, y, z ) ) continue;
+    x = std::min( std::max( x, lx0 ), lx1 );
+    y = std::min( std::max( y, ly0 ), ly1 );
+    z = std::min( std::max( z, lz0 ), lz1 );
+
+    // Six standard normals from three Box-Muller pairs
+    double g[6];
+    for( int p=0; p<3; p++ ) {
+      const double r = sqrt( -2*log( bench_uniform( kk, 3+2*p ) ) );
+      const double a = two_pi*bench_uniform( kk, 4+2*p );
+      g[2*p] = r*cos(a); g[2*p+1] = r*sin(a);
+    }
+    inject_particle( electron, x, y, z, px_e_norm*g[0], px_e_norm*g[1], px_e_norm*g[2], we, 0, 0 );
+    inject_particle( ion_I2,   x, y, z, px_I2_norm*g[3], px_I2_norm*g[4], px_I2_norm*g[5], wi, 0, 0 );
+  }
+  if( electron->np!=nlocal || ion_I2->np!=nlocal )
+    ERROR(( "rank %i injected %li/%li of %lld local pairs", rank(), (long)electron->np, (long)ion_I2->np,
+            (long long)nlocal ));
+
+  sim_log("*** Finished with user-specified initialization ***");
+}
+
+begin_diagnostics {
+  if( global->energies_interval>0 && remainder( step(), global->energies_interval )==0 )
+    dump_energies( "energies", step()==0 ? 0 : 1 );
+}
+
+begin_particle_injection {
+  // No particle injection for this simulation
+}
+
+begin_current_injection {
+  // No current injection for this simulation
+}
+
+begin_field_injection {
+  // Inject a light wave from lhs boundary with E aligned along y, using
+  // scalar diffraction theory for the 3D Gaussian beam source (unchanged
+  // from the original deck except the ramp length of pulse shape 4).
+
+  if ( global->launch_wave == 0 ) return;
+
+#define LEFT_BOUNDARY (grid->x0<(float(global->xmin)+0.5*grid->dx))
+
+  if ( LEFT_BOUNDARY ) { // Node is on left boundary
+    double alpha = grid->cvac*grid->dt/grid->dx;
+    double emax_coeff = ((4/(1+alpha))*global->omega_0*grid->dt*global->emax);
+    double t=grid->dt*step();
+
+    double pulse_shape_factor=1;
+    if ( global->pulse_shape>=1 ) pulse_shape_factor=( t<global->pulse_FWHM ? 1 : 0 );
+    if ( global->pulse_shape==2 ) {
+      float sin_t_tau = sin(t*M_PI/global->pulse_FWHM);
+      pulse_shape_factor =( t<global->pulse_FWHM ? sin_t_tau : 0 );
+    }
+    if ( global->pulse_shape==4 ) {
+      pulse_shape_factor =( t/(LPI_RAMP_STEPS*grid->dt) );
+    }
+
+    double prefactor = emax_coeff*sqrt(2.0/M_PI); // Wave norm at edge of box
+    double rl     = M_PI*global->waist*global->waist/global->lambda; // Rayleigh length
+    double h = global->xfocus/rl;                 // distance/Rayleigh length
+
+    int ny = grid->ny;
+    int nz = grid->nz;
+    float dy = grid->dy;
+    float dz = grid->dz;
+    float y0 = grid->y0;
+    float z0 = grid->z0;
+    float ycenter = global->ycenter;
+    float zcenter = global->zcenter;
+    float width = global->width;
+    float mask = global->mask;
+    float omega_0 = global->omega_0;
+    float dy_offset = y0 - ycenter;
+    float dz_offset = z0 - zcenter;
+    int sy = grid->sy;
+    int sz = grid->sz;
+
+    k_field_t& kfield = field_array->k_f_d;
+
+    Kokkos::MDRangePolicy<Kokkos::Rank<2>> left_edge({1, 1}, {nz+2, ny+1});
+    Kokkos::parallel_for("Field injection", left_edge, KOKKOS_LAMBDA(const int iz, const int iy) {
+        auto DY   =( (iy-0.5)*dy + dy_offset );
+        if (ny==1) DY = 0.;
+        auto DZ   =( (iz-1  )*dz + dz_offset );
+        auto R2   =( DY*DY + DZ*DZ );
+        auto PHASE=( omega_0*t + h*R2/(width*width) );
+        auto MASK =( R2<=pow(mask*width,2) ? 1 : 0 );
+        kfield(1+sy*iy+sz*iz, field_var::ey) += (prefactor * cos(PHASE) * exp(-R2/(width*width)) * MASK * pulse_shape_factor);
+    });
+  }
+}
+
+begin_particle_collisions {
+  // No particle collisions for this simulation
+}
