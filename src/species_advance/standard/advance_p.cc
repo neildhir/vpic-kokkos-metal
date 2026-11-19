@@ -7,6 +7,12 @@
 #include "spa_private.h"
 #include "../../vpic/kokkos_helpers.h"
 #include "../../vpic/kokkos_tuning.hpp"
+#ifdef VPIC_ENABLE_METAL
+#include "../../metal/metal_push.h"
+#include <algorithm>
+#include <cmath>
+#include <map>
+#endif
 
 // Write current values to either an accumulator or directly to the fields
 template<class CurrentScatterAccess>
@@ -1119,6 +1125,157 @@ advance_p_kokkos_gpu(
 
 }
 
+#ifdef VPIC_ENABLE_METAL
+// The Metal kernel (src/metal/advance_p.metal) hard-codes these layouts.
+static_assert(FIELD_VAR_COUNT == 16 && field_var::jfx == 12 &&
+              field_var::jfy == 13 && field_var::jfz == 14,
+              "update advance_p.metal for the new field layout");
+static_assert(INTERPOLATOR_VAR_COUNT == 18 && interpolator_var::ex == 0 &&
+              interpolator_var::dcbzdz == 17,
+              "update advance_p.metal for the new interpolator layout");
+static_assert(PARTICLE_VAR_COUNT == 7 && particle_var::w == 6,
+              "update advance_p.metal for the new particle layout");
+static_assert(sizeof(k_atomic_count_t) == 4,
+              "the Metal push needs VPIC_ENABLE_32BIT_ATOMIC_COUNTERS");
+static_assert(Kokkos::SpaceAccessibility<Kokkos::HostSpace,
+                                         k_particles_t::memory_space>::accessible,
+              "the Metal push shares host memory with the GPU");
+
+// Run the push on the GPU through Metal, on the species' own arrays
+static void
+advance_p_metal( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
+                 float qdt_2mc, float cdt_dx, float cdt_dy, float cdt_dz ) {
+  const grid_t* g = sp->g;
+  if( sp->k_p_d.stride(0)!=1 || ia->k_i_d.stride(0)!=INTERPOLATOR_VAR_COUNT ||
+      fa->k_f_d.stride(0)!=FIELD_VAR_COUNT || sp->k_pm_d.stride(0)!=PARTICLE_MOVER_VAR_COUNT ||
+      sp->k_pc_d.stride(0)!=PARTICLE_VAR_COUNT )
+    ERROR(( "Unexpected array layout for the Metal push" ));
+
+  vpic_metal_push_args a;
+  a.particles         = sp->k_p_d.data();
+  a.particle_stride   = sp->k_p_d.stride(1);
+  a.particle_capacity = sp->k_p_d.extent(0);
+  a.particles_i       = sp->k_p_i_d.data();
+  a.np                = sp->np;
+  a.interpolators     = ia->k_i_d.data();
+  a.fields            = fa->k_f_d.data();
+  a.nvoxels           = fa->k_f_d.extent(0);
+  // Empty when a deck pushes during initialisation, before the table exists
+  a.neighbors         = g->k_neighbor_d.extent(0) ? g->k_neighbor_d.data() : nullptr;
+  a.movers            = sp->k_pm_d.data();
+  a.movers_i          = sp->k_pm_i_d.data();
+  a.copies            = sp->k_pc_d.data();
+  a.copies_i          = sp->k_pc_i_d.data();
+  a.max_nm            = sp->max_nm;
+  a.qdt_2mc = qdt_2mc;
+  a.cdt_dx  = cdt_dx;
+  a.cdt_dy  = cdt_dy;
+  a.cdt_dz  = cdt_dz;
+  a.qsp     = sp->q;
+  // As in advance_p_kokkos_gpu
+  a.cx = 0.25 * g->rdy * g->rdz / g->dt;
+  a.cy = 0.25 * g->rdz * g->rdx / g->dt;
+  a.cz = 0.25 * g->rdx * g->rdy / g->dt;
+  a.nx = g->nx;
+  a.ny = g->ny;
+  a.nz = g->nz;
+  a.rangel = g->rangel;
+  a.rangeh = g->rangeh;
+  if( ia->k_i_d.extent(0)<a.nvoxels || ( a.neighbors && g->k_neighbor_d.extent(0)<6*a.nvoxels ) )
+    ERROR(( "Interpolator or neighbor arrays smaller than the field array: "
+            "%zu interpolators, %zu neighbors, %zu voxels",
+            size_t(ia->k_i_d.extent(0)), size_t(g->k_neighbor_d.extent(0)), a.nvoxels ));
+
+  sp->k_nm_d(0) = static_cast<k_atomic_count_t>( vpic_metal_advance_p( a ) );
+}
+
+// Validation (VPIC_METAL_PUSH_CHECK=1): run the CPU push and the Metal push
+// from the same state and report every difference. The Metal result is kept.
+template<class CpuPush>
+static void
+advance_p_metal_checked( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
+                         float qdt_2mc, float cdt_dx, float cdt_dy, float cdt_dz,
+                         const CpuPush& cpu_push ) {
+  auto clone = []( const auto& v ) {
+    auto c = Kokkos::create_mirror( Kokkos::HostSpace(), v );
+    Kokkos::deep_copy( c, v );
+    return c;
+  };
+  const size_t np = sp->np;
+  const auto p0 = clone( sp->k_p_d );
+  const auto i0 = clone( sp->k_p_i_d );
+  const auto f0 = clone( fa->k_f_d );
+
+  cpu_push();
+  const size_t nm_cpu = sp->k_nm_d(0);
+  const auto p_cpu  = clone( sp->k_p_d );
+  const auto i_cpu  = clone( sp->k_p_i_d );
+  const auto f_cpu  = clone( fa->k_f_d );
+  const auto pm_cpu = clone( sp->k_pm_d );
+  const auto pmi_cpu = clone( sp->k_pm_i_d );
+  const auto pc_cpu = clone( sp->k_pc_d );
+  const auto pci_cpu = clone( sp->k_pc_i_d );
+
+  Kokkos::deep_copy( sp->k_p_d, p0 );
+  Kokkos::deep_copy( sp->k_p_i_d, i0 );
+  Kokkos::deep_copy( fa->k_f_d, f0 );
+  advance_p_metal( sp, ia, fa, qdt_2mc, cdt_dx, cdt_dy, cdt_dz );
+  const size_t nm_gpu = sp->k_nm_d(0);
+
+  // Particles: positions in cell units, momenta relative to their size
+  size_t p_differ = 0, cells_differ = 0;
+  double max_dpos = 0, max_rel_du = 0, max_dw = 0;
+  for( size_t i=0; i<np; i++ ) {
+    bool same = true;
+    for( int v=0; v<PARTICLE_VAR_COUNT; v++ ) {
+      const float a = p_cpu(i,v), b = sp->k_p_d(i,v);
+      if( a==b ) continue;
+      same = false;
+      const double d = std::fabs( double(a)-double(b) );
+      if( v<=particle_var::dz )      max_dpos = std::max( max_dpos, d );
+      else if( v<=particle_var::uz ) max_rel_du = std::max( max_rel_du, d/std::max( std::fabs(double(a)), 1e-30 ) );
+      else                           max_dw = std::max( max_dw, d );
+    }
+    if( !same ) p_differ++;
+    if( i_cpu(i)!=sp->k_p_i_d(i) ) cells_differ++;
+  }
+
+  // Movers: the order is not deterministic on the GPU, so match by particle
+  size_t movers_unmatched = 0, movers_differ = 0;
+  std::map<size_t, size_t> cpu_mover;
+  for( size_t n=0; n<nm_cpu; n++ ) cpu_mover[ pmi_cpu(n) ] = n;
+  for( size_t n=0; n<nm_gpu; n++ ) {
+    auto it = cpu_mover.find( sp->k_pm_i_d(n) );
+    if( it==cpu_mover.end() ) { movers_unmatched++; continue; }
+    const size_t m = it->second;
+    bool same = pci_cpu(m)==sp->k_pc_i_d(n);
+    for( int v=0; v<PARTICLE_MOVER_VAR_COUNT; v++ ) same = same && pm_cpu(m,v)==sp->k_pm_d(n,v);
+    for( int v=0; v<PARTICLE_VAR_COUNT; v++ )       same = same && pc_cpu(m,v)==sp->k_pc_d(n,v);
+    if( !same ) movers_differ++;
+  }
+
+  // Fields: currents may differ by summation order; nothing else may change
+  double jmax[3] = {0,0,0}, jdiff[3] = {0,0,0};
+  size_t other_differ = 0;
+  for( size_t v=0; v<fa->k_f_d.extent(0); v++ )
+    for( int c=0; c<FIELD_VAR_COUNT; c++ ) {
+      const float a = f_cpu(v,c), b = fa->k_f_d(v,c);
+      if( c>=field_var::jfx && c<=field_var::jfz ) {
+        jmax[c-field_var::jfx]  = std::max( jmax[c-field_var::jfx], double(std::fabs(a)) );
+        jdiff[c-field_var::jfx] = std::max( jdiff[c-field_var::jfx], std::fabs( double(a)-double(b) ) );
+      } else if( !(a==b || (a!=a && b!=b)) ) other_differ++;
+    }
+
+  MESSAGE(( "Metal push check \"%s\": %zu/%zu particles differ (max |dpos| %.2e, max rel |du| %.2e, max |dw| %.2e), "
+            "%zu cells differ, movers cpu %zu gpu %zu (%zu unmatched, %zu differ), "
+            "max rel |dj| %.2e %.2e %.2e, other field values changed %zu",
+            sp->name, p_differ, np, max_dpos, max_rel_du, max_dw, cells_differ,
+            nm_cpu, nm_gpu, movers_unmatched, movers_differ,
+            jdiff[0]/std::max(jmax[0],1e-30), jdiff[1]/std::max(jmax[1],1e-30),
+            jdiff[2]/std::max(jmax[2],1e-30), other_differ ));
+}
+#endif
+
 void
 advance_p( /**/  species_t            * RESTRICT sp,
 //           accumulator_array_t * RESTRICT aa,
@@ -1155,6 +1312,9 @@ advance_p( /**/  species_t            * RESTRICT sp,
     #define ADVANCE_P advance_p_kokkos_unified
   #endif
   KOKKOS_TIC();
+#ifdef VPIC_ENABLE_METAL
+  auto cpu_push = [&]() {
+#endif
   ADVANCE_P(
           sp->k_p_d,
           sp->k_p_i_d,
@@ -1179,6 +1339,15 @@ advance_p( /**/  species_t            * RESTRICT sp,
           sp->g->ny,
           sp->g->nz
   );
+#ifdef VPIC_ENABLE_METAL
+  };
+  if( !vpic_metal_push_enabled() )
+    cpu_push();
+  else if( vpic_metal_push_check_enabled() )
+    advance_p_metal_checked( sp, ia, fa, qdt_2mc, cdt_dx, cdt_dy, cdt_dz, cpu_push );
+  else
+    advance_p_metal( sp, ia, fa, qdt_2mc, cdt_dx, cdt_dy, cdt_dz );
+#endif
   KOKKOS_TOC( advance_p, 1);
 
   KOKKOS_TIC();
