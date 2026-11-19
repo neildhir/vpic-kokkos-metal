@@ -4,6 +4,9 @@
 #include "../metal/metal_push.h"
 #endif
 #include "sf_interface_private.h"
+#ifdef VPIC_ENABLE_METAL
+#include "../metal/metal_field_check.h"
+#endif
 
 
 void
@@ -361,6 +364,19 @@ load_interpolator_array( /**/  interpolator_array_t * RESTRICT ia,
   int ny = g->ny;
   int nz = g->nz;
 
+#ifdef VPIC_ENABLE_METAL
+  if( vpic_metal_fields_enabled() ) {
+    if( k_interp.extent(0)<k_field.extent(0) ) ERROR(( "Interpolator array smaller than the field array" ));
+    const vpic_metal_field_args a{ k_field.data(), k_interp.data(), size_t(k_field.extent(0)),
+                                   nx, ny, nz, 0, 0, 0 };
+    auto gpu = [&]() { Kokkos::fence(); vpic_metal_load_interpolator( a ); };
+    if( vpic_metal_fields_check_enabled() )
+      vpic_metal_field_checked( "load_interpolator", k_interp,
+                                [&]() { load_interpolator_array_kokkos(k_interp, k_field, nx, ny, nz); }, gpu );
+    else gpu();
+    return;
+  }
+#endif
   load_interpolator_array_kokkos(k_interp, k_field, nx, ny, nz);
 
 }

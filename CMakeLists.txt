@@ -502,7 +502,8 @@ if (VPIC_ENABLE_METAL)
   # so no Metal toolchain is needed to build
   set(_vpic_metal_kernels ${CMAKE_SOURCE_DIR}/src/metal/layout.metal
     ${CMAKE_SOURCE_DIR}/src/metal/advance_p.metal ${CMAKE_SOURCE_DIR}/src/metal/sort.metal
-    ${CMAKE_SOURCE_DIR}/src/metal/particle_loops.metal)
+    ${CMAKE_SOURCE_DIR}/src/metal/particle_loops.metal
+    ${CMAKE_SOURCE_DIR}/src/metal/fields.metal)
   set(_vpic_metal_source "")
   foreach(_kernel ${_vpic_metal_kernels})
     file(READ ${_kernel} _text)
