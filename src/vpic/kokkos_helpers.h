@@ -269,6 +269,14 @@ void print_particles_d(
         size_t np
         );
 
+// A host copy of a view (for validation code that compares two results)
+template <class View>
+auto k_host_clone(const View& v) {
+  auto c = Kokkos::create_mirror(Kokkos::HostSpace(), v);
+  Kokkos::deep_copy(c, v);
+  return c;
+}
+
 // The templating here is to defer the type until later in the head include chain
 template <class P>
 bool compareParticleMovers(P& a, P& b) {

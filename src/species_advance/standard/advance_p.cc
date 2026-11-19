@@ -1186,6 +1186,7 @@ advance_p_metal( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
             "%zu interpolators, %zu neighbors, %zu voxels",
             size_t(ia->k_i_d.extent(0)), size_t(g->k_neighbor_d.extent(0)), a.nvoxels ));
 
+  Kokkos::fence();   // the GPU reads and adds to arrays Kokkos kernels just wrote
   sp->k_nm_d(0) = static_cast<k_atomic_count_t>( vpic_metal_advance_p( a ) );
 }
 
@@ -1196,25 +1197,20 @@ static void
 advance_p_metal_checked( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
                          float qdt_2mc, float cdt_dx, float cdt_dy, float cdt_dz,
                          const CpuPush& cpu_push ) {
-  auto clone = []( const auto& v ) {
-    auto c = Kokkos::create_mirror( Kokkos::HostSpace(), v );
-    Kokkos::deep_copy( c, v );
-    return c;
-  };
   const size_t np = sp->np;
-  const auto p0 = clone( sp->k_p_d );
-  const auto i0 = clone( sp->k_p_i_d );
-  const auto f0 = clone( fa->k_f_d );
+  const auto p0 = k_host_clone( sp->k_p_d );
+  const auto i0 = k_host_clone( sp->k_p_i_d );
+  const auto f0 = k_host_clone( fa->k_f_d );
 
   cpu_push();
   const size_t nm_cpu = sp->k_nm_d(0);
-  const auto p_cpu  = clone( sp->k_p_d );
-  const auto i_cpu  = clone( sp->k_p_i_d );
-  const auto f_cpu  = clone( fa->k_f_d );
-  const auto pm_cpu = clone( sp->k_pm_d );
-  const auto pmi_cpu = clone( sp->k_pm_i_d );
-  const auto pc_cpu = clone( sp->k_pc_d );
-  const auto pci_cpu = clone( sp->k_pc_i_d );
+  const auto p_cpu  = k_host_clone( sp->k_p_d );
+  const auto i_cpu  = k_host_clone( sp->k_p_i_d );
+  const auto f_cpu  = k_host_clone( fa->k_f_d );
+  const auto pm_cpu = k_host_clone( sp->k_pm_d );
+  const auto pmi_cpu = k_host_clone( sp->k_pm_i_d );
+  const auto pc_cpu = k_host_clone( sp->k_pc_d );
+  const auto pci_cpu = k_host_clone( sp->k_pc_i_d );
 
   Kokkos::deep_copy( sp->k_p_d, p0 );
   Kokkos::deep_copy( sp->k_p_i_d, i0 );

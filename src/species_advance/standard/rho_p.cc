@@ -454,6 +454,35 @@ struct accum_rhob {
     }
 };
 
+// Charge of particle n deposited on the eight corners of its cell:
+// w[0..7] go to v, v+1, v+sy, v+sy+1, v+sz, v+sz+1, v+sz+sy, v+sz+sy+1.
+// Shared by the deposit and the Metal check's reference (the Metal kernel in
+// src/metal/particle_loops.metal repeats it).
+KOKKOS_INLINE_FUNCTION void
+k_rho_weights( const k_particles_t& kparticles, const size_t n, const float q_8V, float w[8] )
+{
+    float w0, w1, w2, w3, w4, w5, w6, w7, dz;
+
+    w0 = kparticles(n, particle_var::dx);
+    w1 = kparticles(n, particle_var::dy);
+    dz = kparticles(n, particle_var::dz);
+    w7 = kparticles(n, particle_var::w) * q_8V;
+
+#   define FMA( x,y,z) ((z)+(x)*(y))
+#   define FNMS(x,y,z) ((z)-(x)*(y))
+    w6=FNMS(w0,w7,w7);                    // q(1-dx)
+    w7=FMA( w0,w7,w7);                    // q(1+dx)
+    w4=FNMS(w1,w6,w6); w5=FNMS(w1,w7,w7); // q(1-dx)(1-dy), q(1+dx)(1-dy)
+    w6=FMA( w1,w6,w6); w7=FMA( w1,w7,w7); // q(1-dx)(1+dy), q(1+dx)(1+dy)
+    w0=FNMS(dz,w4,w4); w1=FNMS(dz,w5,w5); w2=FNMS(dz,w6,w6); w3=FNMS(dz,w7,w7);
+    w4=FMA( dz,w4,w4); w5=FMA( dz,w5,w5); w6=FMA( dz,w6,w6); w7=FMA( dz,w7,w7);
+#   undef FNMS
+#   undef FMA
+
+    w[0] = w0; w[1] = w1; w[2] = w2; w[3] = w3;
+    w[4] = w4; w[5] = w5; w[6] = w6; w[7] = w7;
+}
+
 static void
 k_accumulate_rho_p_cpu( /**/  field_array_t * RESTRICT fa,
                         const species_t     * RESTRICT sp )
@@ -472,35 +501,20 @@ k_accumulate_rho_p_cpu( /**/  field_array_t * RESTRICT fa,
 
     Kokkos::parallel_for("accumulate_rho_p", Kokkos::RangePolicy<>(0, np), 
       KOKKOS_LAMBDA(const size_t n) {
-        float w0, w1, w2, w3, w4, w5, w6, w7, dz;
-
-        w0 = kparticles(n, particle_var::dx);
-        w1 = kparticles(n, particle_var::dy);
-        dz = kparticles(n, particle_var::dz);
+        float w[8];
+        k_rho_weights(kparticles, n, q_8V, w);
         int v = kparticles_i(n);
-        w7 = kparticles(n, particle_var::w) * q_8V;
-
-#   define FMA( x,y,z) ((z)+(x)*(y))
-#   define FNMS(x,y,z) ((z)-(x)*(y))
-        w6=FNMS(w0,w7,w7);                    // q(1-dx)
-        w7=FMA( w0,w7,w7);                    // q(1+dx)
-        w4=FNMS(w1,w6,w6); w5=FNMS(w1,w7,w7); // q(1-dx)(1-dy), q(1+dx)(1-dy)
-        w6=FMA( w1,w6,w6); w7=FMA( w1,w7,w7); // q(1-dx)(1+dy), q(1+dx)(1+dy)
-        w0=FNMS(dz,w4,w4); w1=FNMS(dz,w5,w5); w2=FNMS(dz,w6,w6); w3=FNMS(dz,w7,w7);
-        w4=FMA( dz,w4,w4); w5=FMA( dz,w5,w5); w6=FMA( dz,w6,w6); w7=FMA( dz,w7,w7);
-#   undef FNMS
-#   undef FMA
 
         auto scatter_view_access = scatter_view.access();
 
-        scatter_view_access(v,         field_var::rhof) += w0;
-        scatter_view_access(v+1,       field_var::rhof) += w1;
-        scatter_view_access(v+sy,      field_var::rhof) += w2;
-        scatter_view_access(v+sy+1,    field_var::rhof) += w3;
-        scatter_view_access(v+sz,      field_var::rhof) += w4;
-        scatter_view_access(v+sz+1,    field_var::rhof) += w5;
-        scatter_view_access(v+sz+sy,   field_var::rhof) += w6;
-        scatter_view_access(v+sz+sy+1, field_var::rhof) += w7;
+        scatter_view_access(v,         field_var::rhof) += w[0];
+        scatter_view_access(v+1,       field_var::rhof) += w[1];
+        scatter_view_access(v+sy,      field_var::rhof) += w[2];
+        scatter_view_access(v+sy+1,    field_var::rhof) += w[3];
+        scatter_view_access(v+sz,      field_var::rhof) += w[4];
+        scatter_view_access(v+sz+1,    field_var::rhof) += w[5];
+        scatter_view_access(v+sz+sy,   field_var::rhof) += w[6];
+        scatter_view_access(v+sz+sy+1, field_var::rhof) += w[7];
 
     });
     Kokkos::Experimental::contribute(kfield, scatter_view);
@@ -547,15 +561,10 @@ k_accumulate_rho_p_checked( /**/  field_array_t * RESTRICT fa,
 
   const float q_8V = (sp->q)*(sp->g->r8V);
   const int sy = sp->g->sy, sz = sp->g->sz;
-  for( size_t n=0; n<size_t(sp->np); n++ ) {   // statement for statement as k_accumulate_rho_p_cpu
-    float w0 = sp->k_p_d(n, particle_var::dx), w1 = sp->k_p_d(n, particle_var::dy);
-    const float dz = sp->k_p_d(n, particle_var::dz);
+  for( size_t n=0; n<size_t(sp->np); n++ ) {
+    float w[8];
+    k_rho_weights( sp->k_p_d, n, q_8V, w );
     const int v = sp->k_p_i_d(n);
-    float w7 = sp->k_p_d(n, particle_var::w) * q_8V;
-    float w6 = w7 - w0*w7;  w7 = w7 + w0*w7;
-    float w4 = w6 - w1*w6, w5 = w7 - w1*w7;  w6 = w6 + w1*w6;  w7 = w7 + w1*w7;
-    const float w[8] = { w4 - dz*w4, w5 - dz*w5, w6 - dz*w6, w7 - dz*w7,
-                         w4 + dz*w4, w5 + dz*w5, w6 + dz*w6, w7 + dz*w7 };
     const int corner[8] = { v, v+1, v+sy, v+sy+1, v+sz, v+sz+1, v+sz+sy, v+sz+sy+1 };
     for( int k=0; k<8; k++ ) ref[corner[k]] += double(w[k]);
   }

@@ -113,6 +113,8 @@ id<MTLComputePipelineState> pipeline(id<MTLDevice> device, id<MTLLibrary> librar
   return p;
 }
 
+Context* live_context = nullptr;   // set once context() has created it
+
 Context& context() {
   static Context c = [] {
     Context c;
@@ -200,6 +202,7 @@ Context& context() {
     }
     return c;
   }();
+  live_context = &c;
   return c;
 }
 
@@ -285,6 +288,13 @@ double particle_loop(Context& c, id<MTLComputePipelineState> pso, size_t np, con
 }
 
 }  // namespace
+
+void vpic_metal_forget_arrays() {
+  if (live_context == nullptr) return;   // never used the GPU
+  @autoreleasepool {
+    live_context->wrapped.clear();
+  }
+}
 
 bool vpic_metal_push_enabled() { return env_flag("VPIC_METAL_PUSH", true); }
 

@@ -8,6 +8,9 @@
  *
  */
 
+#ifdef VPIC_ENABLE_METAL
+#include "../metal/metal_push.h"
+#endif
 #include "grid.h"
 
 /* Though these functions are not part of grid's public API, they must
@@ -52,6 +55,9 @@ new_grid( void ) {
 void
 delete_grid( grid_t * g ) {
   if( !g ) return;
+#ifdef VPIC_ENABLE_METAL
+  vpic_metal_forget_arrays();   // the GPU's wrappers of these arrays go stale
+#endif
   UNREGISTER_OBJECT( g );
   FREE_ALIGNED( g->neighbor );
   FREE_ALIGNED( g->range );

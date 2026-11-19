@@ -11,6 +11,7 @@
 #define IN_sfa
 #include "sfa_private.h"
 #include "mpi.h"
+#include <type_traits>
 
 // GPU aware MPI macros
 #ifdef VPIC_ENABLE_GPU_AWARE_MPI
@@ -37,12 +38,14 @@
 // jump a whole row or plane of voxel records per iteration. Iterate so that
 // consecutive iterations touch neighbouring records instead: Y (y or x)
 // fastest on x and z faces, Z (x) fastest on y faces. Device builds keep
-// Kokkos' default. The order does not change results: each iteration copies,
-// or adds into, its own element.
+// Kokkos' default, including those whose memory the host can also reach
+// (CUDA UVM, HIP managed, SYCL shared), where GPU threads want the default
+// order for coalescing. The order does not change results: each iteration
+// copies, or adds into, its own element.
 template <int i, int j, int k>
 struct face_iteration {
   static constexpr bool host =
-    Kokkos::SpaceAccessibility<Kokkos::HostSpace, Kokkos::DefaultExecutionSpace::memory_space>::accessible;
+    std::is_same_v<Kokkos::DefaultExecutionSpace, Kokkos::DefaultHostExecutionSpace>;
   static constexpr Kokkos::Iterate order =
     !host ? Kokkos::Iterate::Default : ( j!=0 ? Kokkos::Iterate::Right : Kokkos::Iterate::Left );
 };

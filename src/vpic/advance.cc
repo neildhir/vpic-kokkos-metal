@@ -29,6 +29,7 @@ metal_sort_species( species_t * sp, const grid_t * g, ParticleSorter<> * sorter 
     return false;
   } else {
     if( !vpic_metal_sort_enabled() ) return false;
+    Kokkos::fence();   // the GPU sorts arrays Kokkos kernels may just have written
     const vpic_metal_sort_args a{ sp->k_p_d.data(), size_t( sp->k_p_d.stride(1) ), sp->k_p_d.extent(0),
                                   sp->k_p_i_d.data(), sp->np, size_t( g->nv ) };
     if( !vpic_metal_sort_check_enabled() ) {
@@ -36,17 +37,12 @@ metal_sort_species( species_t * sp, const grid_t * g, ParticleSorter<> * sorter 
       return true;
     }
 
-    auto clone = []( const auto& v ) {
-      auto c = Kokkos::create_mirror( Kokkos::HostSpace(), v );
-      Kokkos::deep_copy( c, v );
-      return c;
-    };
     const size_t np = sp->np;
-    const auto p0 = clone( sp->k_p_d );
-    const auto cells0 = clone( sp->k_p_i_d );
+    const auto p0 = k_host_clone( sp->k_p_d );
+    const auto cells0 = k_host_clone( sp->k_p_i_d );
     sorter->sort( sp->k_p_d, sp->k_p_i_d, np, g->nv );
-    const auto p_cpu = clone( sp->k_p_d );
-    const auto i_cpu = clone( sp->k_p_i_d );
+    const auto p_cpu = k_host_clone( sp->k_p_d );
+    const auto i_cpu = k_host_clone( sp->k_p_i_d );
     Kokkos::deep_copy( sp->k_p_d, p0 );
     Kokkos::deep_copy( sp->k_p_i_d, cells0 );
     vpic_metal_sort_particles( a );

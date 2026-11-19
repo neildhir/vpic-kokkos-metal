@@ -47,6 +47,13 @@ bool vpic_metal_push_enabled();
 // push from the same state (slow; for validation).
 bool vpic_metal_push_check_enabled();
 
+// Drop the GPU's wrappers of VPIC's arrays. Wrappers are made once per array
+// (wrapping costs about as much as the push) and reused, so call this before
+// any wrapped array (particles, movers, fields, interpolators, neighbors) is
+// freed or re-created; otherwise a new array at the same address and size
+// would be reached through the stale wrapper. Does nothing before first use.
+void vpic_metal_forget_arrays();
+
 // Push all np particles. Returns the number of particles on the mover list.
 // On failure (no GPU, kernel error, mover list overflow) prints the reason and
 // aborts the run.

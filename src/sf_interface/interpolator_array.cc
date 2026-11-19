@@ -1,5 +1,8 @@
 #define IN_sf_interface
 #define HAS_V4_PIPELINE
+#ifdef VPIC_ENABLE_METAL
+#include "../metal/metal_push.h"
+#endif
 #include "sf_interface_private.h"
 
 
@@ -36,6 +39,9 @@ new_interpolator_array( grid_t * g ) {
 void
 delete_interpolator_array( interpolator_array_t * ia ) {
   if( !ia ) return;
+#ifdef VPIC_ENABLE_METAL
+  vpic_metal_forget_arrays();   // the GPU's wrappers of these arrays go stale
+#endif
   UNREGISTER_OBJECT( ia );
   FREE_ALIGNED( ia->i );
   delete(ia);

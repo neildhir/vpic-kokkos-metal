@@ -531,8 +531,10 @@ void reduce_jf(field_array_t* RESTRICT fa ) {
   // current to the host accumulator. Often nothing does (one rank, no open
   // boundaries), and adding zeros then rewrites every field record for
   // nothing. Reading the accumulator once is much cheaper: skip the add and
-  // the clear if it is all zero. Bitwise identical: adding a zero (of either
-  // sign) never changes a field value.
+  // the clear if it is all zero. Field values are unchanged except for the
+  // sign of a zero: a -0 current stays -0 instead of becoming +0. When the
+  // accumulator does hold current (most multi-rank steps), the scan is extra:
+  // one host read of 3 floats per voxel, small next to the copy and add.
   // Count voxels with current (a sum: its identity is 0, unlike Max's)
   int accumulated = 0;
   Kokkos::parallel_reduce("Find jf accumulation",

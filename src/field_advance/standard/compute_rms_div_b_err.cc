@@ -95,8 +95,10 @@ compute_rms_div_b_err( const field_array_t * fa ) {
 double
 compute_rms_div_b_err_kokkos( const field_array_t * fa ) {
   const int nx = fa->g->nx, ny = fa->g->ny, nz = fa->g->nz;
-  k_wide_float_t err = 0;
-  double local[2], global[2];
+  // The reduction runs in k_wide_float_t (float on GPUs without FP64); the
+  // host keeps double
+  double err = 0, local[2], global[2];
+  k_wide_float_t sum = 0;
 
   if( !fa ) ERROR(( "Bad args"));
 
@@ -124,7 +126,8 @@ compute_rms_div_b_err_kokkos( const field_array_t * fa ) {
     Kokkos::parallel_reduce("compute_rms_div_b_err", zyx_policy, KOKKOS_LAMBDA(const int z, const int y, const int x, k_wide_float_t& error) {
         const int f0 = VOXEL(1,y,z,nx,ny,nz) + (x-1);
         error += k_field(f0, field_var::div_b_err) * k_field(f0, field_var::div_b_err);
-    }, err);
+    }, sum);
+    err = sum;
 
   local[0] = err*fa->g->dV;
   local[1] = (fa->g->nx*fa->g->ny*fa->g->nz)*fa->g->dV;

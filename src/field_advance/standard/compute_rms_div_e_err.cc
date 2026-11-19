@@ -54,8 +54,10 @@ compute_rms_div_e_err_kokkos( const field_array_t * RESTRICT fa ) {
 //  pipeline_args_t args[1];
 //  const field_t * f, * f0;
   const grid_t * RESTRICT g;
-  k_wide_float_t err = 0, temp_err = 0;
-  double local[2], global[2];
+  // The reductions run in k_wide_float_t (float on GPUs without FP64); the
+  // host adds their results in double
+  double err = 0, local[2], global[2];
+  k_wide_float_t temp_err = 0;
   int nx, ny, nz;
 
   if( !fa ) ERROR(( "Bad args" ));
@@ -91,7 +93,10 @@ compute_rms_div_e_err_kokkos( const field_array_t * RESTRICT fa ) {
     Kokkos::parallel_reduce("compute_rms_div_e_err", policy_zyx, KOKKOS_LAMBDA(const int z, const int y, const int x, k_wide_float_t& error) {
         k_wide_float_t div_e_err = static_cast<k_wide_float_t>(k_field(VOXEL(x,y,z,nx,ny,nz), field_var::div_e_err));
         error += div_e_err*div_e_err;
-    },err);
+    },temp_err);
+
+    err += temp_err;
+    temp_err = 0.0;
 
   // Have the host accumulate the exterior of the local domain
 

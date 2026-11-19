@@ -1,9 +1,15 @@
 #define IN_field_advance
+#ifdef VPIC_ENABLE_METAL
+#include "../metal/metal_push.h"
+#endif
 #include "field_advance_private.h"
 
 void
 delete_field_array( field_array_t * fa ) {
   if( !fa ) return;
+#ifdef VPIC_ENABLE_METAL
+  vpic_metal_forget_arrays();   // the GPU's wrappers of these arrays go stale
+#endif
   fa->kernel->delete_fa( fa );
 }
 
