@@ -8,6 +8,13 @@
 // arrays must therefore stay allocated (and must not move) for the run.
 // This interface uses plain pointers so that the Objective-C++ side needs no
 // Kokkos headers.
+//
+// Runs are not bitwise repeatable: currents are added with GPU atomics in an
+// order that varies from run to run, and the GPU sort orders particles within
+// a cell differently each time. The differences start at roundoff and grow, as
+// between multithreaded CPU runs. Compare results with tolerances, or use the
+// check modes (VPIC_METAL_PUSH_CHECK, VPIC_METAL_SORT_CHECK), which compare
+// each GPU step with the CPU code from the same state.
 
 #include <cstddef>
 #include <cstdint>
@@ -44,5 +51,25 @@ bool vpic_metal_push_check_enabled();
 // On failure (no GPU, kernel error, mover list overflow) prints the reason and
 // aborts the run.
 size_t vpic_metal_advance_p(const vpic_metal_push_args& args);
+
+// Particle sort on the GPU: particles grouped by cell, cells in increasing
+// order (VPIC's StandardSortOrder), sorted in place.
+struct vpic_metal_sort_args {
+  float* particles;          // particle (i, var) at particles[var*stride + i]
+  size_t particle_stride;
+  size_t particle_capacity;  // rows allocated
+  int*   particles_i;        // cell of each particle
+  size_t np;
+  size_t ncells;             // cell indices are in [0, ncells)
+};
+
+// True unless VPIC_METAL_SORT=0, which sorts on the CPU in a Metal build.
+bool vpic_metal_sort_enabled();
+
+// True if VPIC_METAL_SORT_CHECK=1: compare every GPU sort with the CPU sort.
+bool vpic_metal_sort_check_enabled();
+
+// Sort the particles. Aborts the run on failure.
+void vpic_metal_sort_particles(const vpic_metal_sort_args& args);
 
 #endif // _vpic_metal_push_h_
