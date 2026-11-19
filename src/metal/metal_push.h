@@ -44,7 +44,8 @@ struct vpic_metal_push_args {
 bool vpic_metal_push_enabled();
 
 // True if VPIC_METAL_PUSH_CHECK=1: compare every Metal push against the CPU
-// push from the same state and abort on a mismatch (slow; for validation).
+// push from the same state and abort on a mismatch beyond rounding (slow; for
+// validation; tolerances in advance_p_metal_checked).
 bool vpic_metal_push_check_enabled();
 
 // Drop the GPU's wrappers of VPIC's arrays. Wrappers are made once per array

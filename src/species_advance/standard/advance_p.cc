@@ -9,6 +9,7 @@
 #include "../../vpic/kokkos_tuning.hpp"
 #ifdef VPIC_ENABLE_METAL
 #include "../../metal/metal_push.h"
+#include <set>
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -1141,6 +1142,32 @@ static_assert(Kokkos::SpaceAccessibility<Kokkos::HostSpace,
                                          k_particles_t::memory_space>::accessible,
               "the Metal push shares host memory with the GPU");
 
+// Apple GPUs flush float results below FLT_MIN (about 1.2e-38) to zero; the
+// CPU keeps them. The push builds each particle's current from its charge
+// q = (species charge) x (weight) times its displacement and interpolation
+// weights, all of which can be far below 1, so a tiny q puts current terms in
+// that range and the GPU drops them. Decks in VPIC's normalised units have
+// |q| around 1e-3 to 1; decks with charges in SI units can have |q| near 1e-30
+// (sample/beam_plas: up to 5% of its tiny thermal ion current lost). Warn once
+// per species, at the first push with particles, if max |q| is below 1e-20.
+static void
+warn_if_currents_underflow( const species_t* sp ) {
+  static std::set<const species_t*> checked;
+  if( sp->np==0 || checked.count( sp ) ) return;
+  checked.insert( sp );
+  const k_particles_t& p = sp->k_p_d;
+  float max_w = 0;
+  Kokkos::parallel_reduce( "metal: max |weight|", sp->np, KOKKOS_LAMBDA( const size_t i, float& m ) {
+    m = Kokkos::max( m, Kokkos::fabs( p(i, particle_var::w) ) );
+  }, Kokkos::Max<float>( max_w ) );
+  const double q = std::fabs( double(sp->q) * double(max_w) );
+  if( q<1e-20 )
+    WARNING(( "Metal push: species \"%s\" has |charge x weight| up to %.2g. Apple GPUs flush float values below "
+              "1.2e-38 to zero, so current terms this small are lost on the GPU (the CPU keeps them). Decks in "
+              "normalised units are unaffected; to compare, run with VPIC_METAL_PUSH=0 or VPIC_METAL_PUSH_CHECK=1.",
+              sp->name, q ));
+}
+
 // Run the push on the GPU through Metal, on the species' own arrays
 static void
 advance_p_metal( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
@@ -1187,6 +1214,7 @@ advance_p_metal( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
             size_t(ia->k_i_d.extent(0)), size_t(g->k_neighbor_d.extent(0)), a.nvoxels ));
 
   Kokkos::fence();   // the GPU reads and adds to arrays Kokkos kernels just wrote
+  warn_if_currents_underflow( sp );
   sp->k_nm_d(0) = static_cast<k_atomic_count_t>( vpic_metal_advance_p( a ) );
 }
 
@@ -1252,13 +1280,15 @@ advance_p_metal_checked( species_t* sp, interpolator_array_t* ia, field_array_t*
 
   // Fields: currents may differ by summation order; nothing else may change
   double jmax[3] = {0,0,0}, jdiff[3] = {0,0,0};
+  size_t jworst[3] = {0,0,0};   // voxel of the largest difference, per component
   size_t other_differ = 0;
   for( size_t v=0; v<fa->k_f_d.extent(0); v++ )
     for( int c=0; c<FIELD_VAR_COUNT; c++ ) {
       const float a = f_cpu(v,c), b = fa->k_f_d(v,c);
       if( c>=field_var::jfx && c<=field_var::jfz ) {
         jmax[c-field_var::jfx]  = std::max( jmax[c-field_var::jfx], double(std::fabs(a)) );
-        jdiff[c-field_var::jfx] = std::max( jdiff[c-field_var::jfx], std::fabs( double(a)-double(b) ) );
+        const double d = std::fabs( double(a)-double(b) );
+        if( d>jdiff[c-field_var::jfx] ) { jdiff[c-field_var::jfx] = d; jworst[c-field_var::jfx] = v; }
       } else if( !(a==b || (a!=a && b!=b)) ) other_differ++;
     }
 
@@ -1270,15 +1300,32 @@ advance_p_metal_checked( species_t* sp, interpolator_array_t* ia, field_array_t*
             jdiff[0]/std::max(jmax[0],1e-30), jdiff[1]/std::max(jmax[1],1e-30),
             jdiff[2]/std::max(jmax[2],1e-30), other_differ ));
 
-  // The push follows the CPU code statement for statement, so particles,
-  // cells and movers must match exactly. Currents differ only by the order of
-  // the atomic adds (about 1e-6 of the largest current in practice).
-  const double j_tolerance = 1e-4;
+  // The push follows the CPU code statement for statement. On the M4 it was
+  // developed on, particles, cells and movers match bit for bit. Another GPU
+  // or Metal compiler may round differently (for example by fusing a multiply
+  // and an add), so particles may differ by rounding: positions by 1e-6 (cell
+  // units, about 16 float steps), momenta by 1e-6 relative. Weights, cells and
+  // movers must match exactly, and no field value other than the currents may
+  // change. Currents differ by the order of the atomic adds (about 1e-6 of the
+  // largest current in practice); they may differ by 1e-4 of the largest.
+  const double pos_tolerance = 1e-6, mom_tolerance = 1e-6, j_tolerance = 1e-4;
   bool currents_ok = true;
   for( int c=0; c<3; c++ ) currents_ok = currents_ok && jdiff[c]<=j_tolerance*std::max( jmax[c], 1e-30 );
-  if( p_differ || cells_differ || nm_cpu!=nm_gpu || movers_unmatched || movers_differ || other_differ || !currents_ok )
-    ERROR(( "Metal push check \"%s\" failed (see the message above; currents may differ by at most %.0e of the largest)",
-            sp->name, j_tolerance ));
+  const bool particles_ok = max_dpos<=pos_tolerance && max_rel_du<=mom_tolerance && max_dw==0;
+  if( !currents_ok ) {
+    const grid_t* g = sp->g;
+    const size_t sy = g->nx+2, sz = sy*(g->ny+2);
+    for( int c=0; c<3; c++ ) {
+      const size_t v = jworst[c];
+      MESSAGE(( "Metal push check \"%s\": largest jf%c difference at voxel (%zu,%zu,%zu) of %dx%dx%d: CPU %.9g, GPU %.9g "
+                "(largest |jf%c| %.3g)", sp->name, "xyz"[c], v%sy, (v/sy)%(g->ny+2), v/sz, g->nx, g->ny, g->nz,
+                double(f_cpu(v, field_var::jfx+c)), double(fa->k_f_d(v, field_var::jfx+c)), "xyz"[c], jmax[c] ));
+    }
+  }
+  if( !particles_ok || cells_differ || nm_cpu!=nm_gpu || movers_unmatched || movers_differ || other_differ || !currents_ok )
+    ERROR(( "Metal push check \"%s\" failed (see the message above). Allowed: positions within %.0e, momenta within "
+            "%.0e relative, currents within %.0e of the largest; weights, cells, movers and other fields exact",
+            sp->name, pos_tolerance, mom_tolerance, j_tolerance ));
 }
 #endif
 

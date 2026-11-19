@@ -1,10 +1,15 @@
 # Metal builds only: run small decks with every Metal check mode on. Each check
 # runs the GPU code and the CPU code from the same state and aborts the run on
 # a mismatch, so these tests fail if the GPU path ever disagrees with the CPU:
-#   push       particles, cells and movers exact; currents within 1e-4
+#   push       particles within rounding (1e-6), weights, cells and movers
+#              exact, currents within 1e-4 of the largest
 #   sort       same cell order and the same particles in every cell
 #   rho, energy  GPU sums against a double-precision reference
-#   fields     advance_b, load_interpolator, clear_jf bit for bit (enabled here)
+#   fields     advance_b, load_interpolator, clear_jf within rounding (1e-6)
+#              (enabled here)
+# On the M4 these were developed on, particles and fields match bit for bit;
+# the rounding allowance is for GPUs or Metal compilers that round differently.
+# A failure well above 1e-6 is a real disagreement between GPU and CPU.
 # The decks are the benchmark decks (benchmarks/decks): Harris reconnection
 # (periodic y, conducting x walls) and VPIC's LPI deck (absorbing fields, laser
 # injection, reflecting particles), on 1 and 2 ranks.
