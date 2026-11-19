@@ -3,7 +3,8 @@
 // grouped by cell index, cells in increasing order. The order of particles
 // within a cell is not deterministic (as with the CPU sort on several threads).
 //
-// Passes (all in one command buffer, see metal_push.mm):
+// Passes (queued in order, the particle passes in chunks of command buffers
+// to stay under the macOS GPU watchdog; see metal_push.mm):
 //   1. sort_count:    per-cell counts, and each particle's rank in its cell
 //   2. scan_blocks / scan_add: exclusive prefix sum of the counts, giving
 //                     each cell's first slot (multi-level, any number of cells)
@@ -18,13 +19,15 @@ using namespace metal;
 struct SortParams {
   ulong np;       // particles
   ulong stride;   // particle (i, var) is at p[var*stride + i]
+  ulong first;    // first particle of this dispatch (passes are chunked)
 };
 
 kernel void sort_count(device const int*   cell   [[buffer(0)]],
                        device atomic_uint* counts [[buffer(1)]],
                        device uint*        rank   [[buffer(2)]],
                        constant SortParams& S     [[buffer(3)]],
-                       uint i [[thread_position_in_grid]]) {
+                       uint gid [[thread_position_in_grid]]) {
+  const ulong i = S.first + gid;
   if (i >= S.np) return;
   rank[i] = atomic_fetch_add_explicit(&counts[cell[i]], 1u, memory_order_relaxed);
 }
@@ -78,7 +81,8 @@ kernel void sort_scatter(device const float* p        [[buffer(0)]],
                          device float*       p_out    [[buffer(4)]],
                          device int*         cell_out [[buffer(5)]],
                          constant SortParams& S       [[buffer(6)]],
-                         uint i [[thread_position_in_grid]]) {
+                         uint gid [[thread_position_in_grid]]) {
+  const ulong i = S.first + gid;
   if (i >= S.np) return;
   const int c = cell[i];
   const ulong dst = ulong(offsets[c]) + rank[i];

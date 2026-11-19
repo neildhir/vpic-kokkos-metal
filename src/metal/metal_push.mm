@@ -29,7 +29,7 @@ static_assert(sizeof(vpic_metal_push_params) == 96, "PushParams layout changed")
 
 // Must match SortParams in sort.metal
 struct vpic_metal_sort_params {
-  uint64_t np, stride;
+  uint64_t np, stride, first;
 };
 
 [[noreturn]] void fail(const std::string& why) {
@@ -320,68 +320,101 @@ void vpic_metal_sort_particles(const vpic_metal_sort_args& a) {
     }
     auto level_data = [&](size_t l) { return l == 0 ? c.sort_counts : c.scan_sums[l - 1]; };
 
-    const vpic_metal_sort_params S{a.np, a.particle_stride};
-    id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+    // Command buffers on one queue run in order. The particle passes go in
+    // chunks of at most c.chunk particles per command buffer, like the push,
+    // so that no command buffer runs long enough for the macOS GPU watchdog.
+    NSMutableArray<id<MTLCommandBuffer>>* all = [NSMutableArray array];
+    auto commit = [&](id<MTLCommandBuffer> cb) { [cb commit]; [all addObject:cb]; };
+    auto particle_pass = [&](id<MTLComputePipelineState> pso, auto bind) {
+      for (size_t first = 0; first < a.np; first += c.chunk) {
+        const size_t n = std::min(c.chunk, a.np - first);
+        const vpic_metal_sort_params S{a.np, a.particle_stride, first};
+        id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+        id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+        [enc setComputePipelineState:pso];
+        bind(enc, S);
+        [enc dispatchThreads:MTLSizeMake(n, 1, 1) threadsPerThreadgroup:MTLSizeMake(c.threads, 1, 1)];
+        [enc endEncoding];
+        commit(cb);
+      }
+    };
 
-    id<MTLBlitCommandEncoder> clear = [cb blitCommandEncoder];
-    [clear fillBuffer:c.sort_counts range:NSMakeRange(0, a.ncells * sizeof(uint32_t)) value:0];
-    [clear endEncoding];
-
-    // Dispatches in one (serial) compute encoder run in order, each seeing the
-    // previous one's writes
-    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
-    [enc setComputePipelineState:c.sort_count];
-    [enc setBuffer:cells.buffer offset:cells.offset atIndex:0];
-    [enc setBuffer:c.sort_counts offset:0 atIndex:1];
-    [enc setBuffer:c.sort_rank offset:0 atIndex:2];
-    [enc setBytes:&S length:sizeof(S) atIndex:3];
-    [enc dispatchThreads:MTLSizeMake(a.np, 1, 1) threadsPerThreadgroup:MTLSizeMake(c.threads, 1, 1)];
-
-    [enc setComputePipelineState:c.scan_blocks];
-    [enc setThreadgroupMemoryLength:32 * sizeof(uint32_t) atIndex:0];
-    for (size_t l = 0; l < level_n.size(); ++l) {
-      const uint32_t n = level_n[l];
-      [enc setBuffer:level_data(l) offset:0 atIndex:0];
-      [enc setBuffer:c.scan_sums[l] offset:0 atIndex:1];
-      [enc setBytes:&n length:sizeof(n) atIndex:2];
-      [enc dispatchThreadgroups:MTLSizeMake((n + tg - 1) / tg, 1, 1) threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    // 1. Clear the counts, then count particles per cell (with their ranks)
+    {
+      id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+      id<MTLBlitCommandEncoder> clear = [cb blitCommandEncoder];
+      [clear fillBuffer:c.sort_counts range:NSMakeRange(0, a.ncells * sizeof(uint32_t)) value:0];
+      [clear endEncoding];
+      commit(cb);
     }
-    [enc setComputePipelineState:c.scan_add];
-    for (size_t l = level_n.size() - 1; l-- > 0;) {
-      const uint32_t n = level_n[l];
-      [enc setBuffer:level_data(l) offset:0 atIndex:0];
-      [enc setBuffer:c.scan_sums[l] offset:0 atIndex:1];
-      [enc setBytes:&n length:sizeof(n) atIndex:2];
-      [enc dispatchThreadgroups:MTLSizeMake((n + tg - 1) / tg, 1, 1) threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+    particle_pass(c.sort_count, [&](id<MTLComputeCommandEncoder> enc, const vpic_metal_sort_params& S) {
+      [enc setBuffer:cells.buffer offset:cells.offset atIndex:0];
+      [enc setBuffer:c.sort_counts offset:0 atIndex:1];
+      [enc setBuffer:c.sort_rank offset:0 atIndex:2];
+      [enc setBytes:&S length:sizeof(S) atIndex:3];
+    });
+
+    // 2. Exclusive prefix sum of the counts: each cell's first slot. Dispatches
+    // in one (serial) compute encoder run in order, each seeing the previous
+    // one's writes. This touches cells, not particles, so it is short.
+    {
+      id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+      id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+      [enc setComputePipelineState:c.scan_blocks];
+      [enc setThreadgroupMemoryLength:32 * sizeof(uint32_t) atIndex:0];
+      for (size_t l = 0; l < level_n.size(); ++l) {
+        const uint32_t n = level_n[l];
+        [enc setBuffer:level_data(l) offset:0 atIndex:0];
+        [enc setBuffer:c.scan_sums[l] offset:0 atIndex:1];
+        [enc setBytes:&n length:sizeof(n) atIndex:2];
+        [enc dispatchThreadgroups:MTLSizeMake((n + tg - 1) / tg, 1, 1) threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+      }
+      [enc setComputePipelineState:c.scan_add];
+      for (size_t l = level_n.size() - 1; l-- > 0;) {
+        const uint32_t n = level_n[l];
+        [enc setBuffer:level_data(l) offset:0 atIndex:0];
+        [enc setBuffer:c.scan_sums[l] offset:0 atIndex:1];
+        [enc setBytes:&n length:sizeof(n) atIndex:2];
+        [enc dispatchThreadgroups:MTLSizeMake((n + tg - 1) / tg, 1, 1) threadsPerThreadgroup:MTLSizeMake(tg, 1, 1)];
+      }
+      [enc endEncoding];
+      commit(cb);
     }
 
-    [enc setComputePipelineState:c.sort_scatter];
-    [enc setBuffer:p.buffer offset:p.offset atIndex:0];
-    [enc setBuffer:cells.buffer offset:cells.offset atIndex:1];
-    [enc setBuffer:c.sort_counts offset:0 atIndex:2];
-    [enc setBuffer:c.sort_rank offset:0 atIndex:3];
-    [enc setBuffer:c.sort_p offset:0 atIndex:4];
-    [enc setBuffer:c.sort_cells offset:0 atIndex:5];
-    [enc setBytes:&S length:sizeof(S) atIndex:6];
-    [enc dispatchThreads:MTLSizeMake(a.np, 1, 1) threadsPerThreadgroup:MTLSizeMake(c.threads, 1, 1)];
-    [enc endEncoding];
+    // 3. Scatter each particle to its slot in the scratch arrays
+    particle_pass(c.sort_scatter, [&](id<MTLComputeCommandEncoder> enc, const vpic_metal_sort_params& S) {
+      [enc setBuffer:p.buffer offset:p.offset atIndex:0];
+      [enc setBuffer:cells.buffer offset:cells.offset atIndex:1];
+      [enc setBuffer:c.sort_counts offset:0 atIndex:2];
+      [enc setBuffer:c.sort_rank offset:0 atIndex:3];
+      [enc setBuffer:c.sort_p offset:0 atIndex:4];
+      [enc setBuffer:c.sort_cells offset:0 atIndex:5];
+      [enc setBytes:&S length:sizeof(S) atIndex:6];
+    });
 
-    // Copy the sorted particles back over the originals, column by column
-    id<MTLBlitCommandEncoder> back = [cb blitCommandEncoder];
+    // 4. Copy the sorted particles back over the originals, column by column
     const NSUInteger column = a.particle_stride * sizeof(float);
-    for (NSUInteger v = 0; v < 7; ++v)
-      [back copyFromBuffer:c.sort_p sourceOffset:v * column toBuffer:p.buffer
-         destinationOffset:p.offset + v * column size:a.np * sizeof(float)];
-    [back copyFromBuffer:c.sort_cells sourceOffset:0 toBuffer:cells.buffer
-       destinationOffset:cells.offset size:a.np * sizeof(int)];
-    [back endEncoding];
+    for (size_t first = 0; first < a.np; first += c.chunk) {
+      const size_t n = std::min(c.chunk, a.np - first);
+      id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+      id<MTLBlitCommandEncoder> back = [cb blitCommandEncoder];
+      for (NSUInteger v = 0; v < 7; ++v)
+        [back copyFromBuffer:c.sort_p sourceOffset:v * column + first * sizeof(float) toBuffer:p.buffer
+           destinationOffset:p.offset + v * column + first * sizeof(float) size:n * sizeof(float)];
+      [back copyFromBuffer:c.sort_cells sourceOffset:first * sizeof(int) toBuffer:cells.buffer
+         destinationOffset:cells.offset + first * sizeof(int) size:n * sizeof(int)];
+      [back endEncoding];
+      commit(cb);
+    }
 
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.status != MTLCommandBufferStatusCompleted)
-      fail(std::string("the sort command buffer failed: ") +
-           (cb.error ? cb.error.localizedDescription.UTF8String : "unknown error"));
-    const double gpu = cb.GPUEndTime - cb.GPUStartTime;
+    [all.lastObject waitUntilCompleted];
+    double gpu = 0;
+    for (id<MTLCommandBuffer> cb in all) {
+      if (cb.status != MTLCommandBufferStatusCompleted)
+        fail(std::string("a sort command buffer failed: ") +
+             (cb.error ? cb.error.localizedDescription.UTF8String : "unknown error"));
+      gpu += cb.GPUEndTime - cb.GPUStartTime;
+    }
     c.sort_gpu_seconds += gpu;
     c.sort_calls += 1;
     if (c.profile)
