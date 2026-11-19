@@ -244,7 +244,9 @@ def push_rate_figure(
         parts.append(_text(x + 8, y + 4, f"{p.gpu} {approx}".strip(), "ink2", size=11))
     items = [(s.label, s.slot, "line") for s in series]
     if published:
-        items.append(("Published GPUs, Tan et al. 2025 (≈: read off the figure)", -1, "ref"))
+        items.append(
+            ("Published GPUs, Tan et al. 2025: larger problem, for scale only (≈: read off the figure)", -1, "ref")
+        )
     parts += _legend(items, MARGIN_TOP + plot_h + AXIS_BAND + 8)
     return _finish(parts)
 
