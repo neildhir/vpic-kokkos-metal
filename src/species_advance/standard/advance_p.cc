@@ -1244,6 +1244,9 @@ advance_p_metal_checked( species_t* sp, interpolator_array_t* ia, field_array_t*
   Kokkos::deep_copy( sp->k_p_i_d, i0 );
   Kokkos::deep_copy( fa->k_f_d, f0 );
   advance_p_metal( sp, ia, fa, qdt_2mc, cdt_dx, cdt_dy, cdt_dz );
+  // With compact currents the GPU push added to the compact array: add them
+  // to the fields now, so they compare with the CPU push's
+  vpic_metal_flush_compact_currents( fa->k_f_d.data(), fa->k_f_d.extent(0), true );
   const size_t nm_gpu = sp->k_nm_d(0);
 
   // Particles: positions in cell units, momenta relative to their size

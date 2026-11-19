@@ -25,8 +25,9 @@ struct vpic_metal_push_params {
   int64_t  rangel, rangeh;
   float    qdt_2mc, cdt_dx, cdt_dy, cdt_dz, qsp, cx, cy, cz;
   int32_t  nx, ny, nz, has_neighbors;
+  int32_t  compact_j, pad;
 };
-static_assert(sizeof(vpic_metal_push_params) == 96, "PushParams layout changed");
+static_assert(sizeof(vpic_metal_push_params) == 104, "PushParams layout changed");
 
 // Must match SortParams in sort.metal
 struct vpic_metal_sort_params {
@@ -120,6 +121,14 @@ struct Context {
 
   // Field kernels
   id<MTLComputePipelineState> advance_b = nil, load_interpolator = nil, clear_jf = nil;
+
+  // Compact currents: between vpic_metal_begin_compact_currents and
+  // vpic_metal_end_compact_currents the push adds currents to jacc (4 floats
+  // per voxel, zero outside that window) instead of the fields
+  id<MTLComputePipelineState> unload = nil;
+  id<MTLBuffer> jacc = nil;
+  size_t jacc_voxels = 0;
+  bool compact_active = false;
   double   fields_gpu_seconds = 0;
   uint64_t field_calls = 0;
 };
@@ -191,6 +200,7 @@ Context& context() {
     c.advance_b = pipeline(c.device, library, @"advance_b");
     c.load_interpolator = pipeline(c.device, library, @"load_interpolator");
     c.clear_jf = pipeline(c.device, library, @"clear_jf");
+    c.unload = pipeline(c.device, library, @"unload_currents");
     // The scan kernels assume 32-wide SIMD groups and full threadgroups
     if (c.scan_blocks.threadExecutionWidth != 32)
       fail("the scan kernels need 32-wide SIMD groups; this GPU has " +
@@ -397,6 +407,9 @@ size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
     P.qsp = a.qsp; P.cx = a.cx; P.cy = a.cy; P.cz = a.cz;
     P.nx = a.nx; P.ny = a.ny; P.nz = a.nz;
     P.has_neighbors = a.neighbors != nullptr;
+    P.compact_j = c.compact_active ? 1 : 0;
+    if (c.compact_active && c.jacc_voxels != a.nvoxels)
+      fail("the compact current array does not match the field array");
 
     // One command buffer per chunk of particles, all queued before waiting;
     // the mover counter carries over between them.
@@ -405,6 +418,7 @@ size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
       P.first = first;
       for (NSUInteger k = 0; k < 9; ++k)
         [enc setBuffer:buffers[k].buffer offset:buffers[k].offset atIndex:k];
+      if (c.compact_active) [enc setBuffer:c.jacc offset:0 atIndex:3];   // currents go to the compact array
       [enc setBuffer:c.counters offset:0 atIndex:9];
       [enc setBytes:&P length:sizeof(P) atIndex:10];
     });
@@ -690,4 +704,49 @@ void vpic_metal_clear_jf(const vpic_metal_field_args& a) {
       [enc setBytes:&nv length:sizeof(nv) atIndex:1];
     });
   }
+}
+
+bool vpic_metal_compact_currents_enabled() { return env_flag("VPIC_METAL_COMPACT_J", true); }
+
+void vpic_metal_begin_compact_currents(size_t nvoxels) {
+  if (nvoxels > UINT32_MAX) fail("the compact current array counts voxels with 32-bit integers");
+  @autoreleasepool {
+    Context& c = context();
+    if (c.jacc_voxels != nvoxels) {
+      // New array: zero it once; unload_currents leaves it zero afterwards
+      c.jacc = [c.device newBufferWithLength:std::max<size_t>(nvoxels * 4 * sizeof(float), 16)
+                                     options:MTLResourceStorageModePrivate];
+      if (c.jacc == nil) fail("could not allocate the compact current array");
+      id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+      cb.label = label_for("compact currents clear");
+      id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+      [blit fillBuffer:c.jacc range:NSMakeRange(0, c.jacc.length) value:0];
+      [blit endEncoding];
+      [cb commit];
+      [cb waitUntilCompleted];
+      c.jacc_voxels = nvoxels;
+    }
+    c.compact_active = true;
+  }
+}
+
+void vpic_metal_flush_compact_currents(float* fields, size_t nvoxels, bool add) {
+  @autoreleasepool {
+    Context& c = context();
+    if (!c.compact_active) return;
+    if (nvoxels != c.jacc_voxels) fail("the compact current array does not match the field array");
+    const Wrapped f = wrap(c, fields, nvoxels * 16 * sizeof(float), "the fields");
+    const uint32_t params[2] = {uint32_t(nvoxels), add ? 1u : 0u};
+    field_kernel(c, c.unload, MTLSizeMake(nvoxels, 1, 1), add ? "unload currents (add)" : "unload currents",
+                 [&](id<MTLComputeCommandEncoder> enc) {
+      [enc setBuffer:f.buffer offset:f.offset atIndex:0];
+      [enc setBuffer:c.jacc offset:0 atIndex:1];
+      [enc setBytes:params length:sizeof(params) atIndex:2];
+    });
+  }
+}
+
+void vpic_metal_end_compact_currents(float* fields, size_t nvoxels, bool add) {
+  vpic_metal_flush_compact_currents(fields, nvoxels, add);
+  context().compact_active = false;
 }

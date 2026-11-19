@@ -115,7 +115,26 @@ int vpic_simulation::advance(void)
 
   //printf("Sorted\n");
   // HOST - Touches accumulators
-  if( species_list )
+#ifdef VPIC_ENABLE_METAL
+  // Compact currents: the GPU push adds the step's currents to a compact array
+  // and they are stored into the fields after the species loop, which replaces
+  // clear_jf. In push-check mode clear_jf stays and each checked push adds its
+  // currents to the fields at once, so the per-species comparison works.
+  // Used below METAL_COMPACT_J_MAX_PPC macro particles per voxel: on an M4 it
+  // cut the step 11% for LPI 128^3 (6 per voxel) and ~1.5% around 50-100 per
+  // voxel, but cost 2.8% at 870 per voxel (LPI 24^3), where the push gains
+  // little and the extra unload pass shows.
+  constexpr double METAL_COMPACT_J_MAX_PPC = 128;
+  size_t metal_np = 0;
+  LIST_FOR_EACH( sp, species_list ) metal_np += sp->np;
+  const bool metal_compact_j = species_list && vpic_metal_push_enabled() && vpic_metal_compact_currents_enabled() &&
+                               double(metal_np) < METAL_COMPACT_J_MAX_PPC * double(field_array->k_f_d.extent(0));
+  const bool metal_compact_store = metal_compact_j && !vpic_metal_push_check_enabled();
+  if( metal_compact_j ) vpic_metal_begin_compact_currents( field_array->k_f_d.extent(0) );
+#else
+  const bool metal_compact_store = false;
+#endif
+  if( species_list && !metal_compact_store )
   {
     // TIC clear_accumulator_array( accumulator_array ); TOC( clear_accumulators, 1 );
     //TIC clear_accumulator_array_kokkos( accumulator_array ); TOC( clear_accumulators, 1 );
@@ -144,6 +163,12 @@ int vpic_simulation::advance(void)
       // Now Times internally
       advance_p( sp, interpolator_array, field_array );
   }
+#ifdef VPIC_ENABLE_METAL
+  if( metal_compact_j ) {
+    TIC vpic_metal_end_compact_currents( field_array->k_f_d.data(), field_array->k_f_d.extent(0),
+                                         !metal_compact_store ); TOC( clear_jf, 1 );
+  }
+#endif
   //printf("Pushed\n");
 
   // Reduce accumulator contributions into the device array

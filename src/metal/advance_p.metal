@@ -19,15 +19,23 @@ struct PushParams {
   float qdt_2mc, cdt_dx, cdt_dy, cdt_dz, qsp, cx, cy, cz;
   int   nx, ny, nz;
   int   has_neighbors;  // 0 before VPIC has built the neighbor table
+  int   compact_j;      // 1: add currents to the compact array (4 floats per voxel), not the fields
+  int   pad;
 };
 
 inline int voxel(int x, int y, int z, int nx, int ny) {
   return x + (nx + 2) * (y + (ny + 2) * z);
 }
 
-inline void add_current(device atomic_float* f, int v, ulong comp, float value) {
-  atomic_fetch_add_explicit(&f[ulong(v) * FIELD_VARS + comp], value,
-                            memory_order_relaxed);
+// Add a current to voxel v. With P.compact_j, f is the compact current
+// array (jx, jy, jz and a pad per voxel), which unload_currents later stores
+// into the fields: 16 bytes per voxel instead of the 64-byte field record, so
+// atomics on neighbouring voxels share cache lines. That cut the push 4-30% on
+// an M4, most on large grids with few particles per cell, where the push is
+// limited by memory traffic.
+inline void add_current(device atomic_float* f, int v, ulong comp, float value, constant PushParams& P) {
+  const ulong index = P.compact_j ? ulong(v) * 4 + (comp - JFX) : ulong(v) * FIELD_VARS + comp;
+  atomic_fetch_add_explicit(&f[index], value, memory_order_relaxed);
 }
 
 // Charge-conserving current of one streak on the 12 edges of its cell, in the
@@ -81,18 +89,18 @@ inline void scatter_currents(device atomic_float* f, int ii, thread const EdgeCu
   const int ayz = voxel(xi,     yi + 1, zi + 1, P.nx, P.ny);
   const int azx = voxel(xi + 1, yi,     zi + 1, P.nx, P.ny);
   const int axy = voxel(xi + 1, yi + 1, zi,     P.nx, P.ny);
-  add_current(f, ii,  JFX, e.j[0]);
-  add_current(f, ay,  JFX, e.j[1]);
-  add_current(f, az,  JFX, e.j[2]);
-  add_current(f, ayz, JFX, e.j[3]);
-  add_current(f, ii,  JFY, e.j[4]);
-  add_current(f, az,  JFY, e.j[5]);
-  add_current(f, ax,  JFY, e.j[6]);
-  add_current(f, azx, JFY, e.j[7]);
-  add_current(f, ii,  JFZ, e.j[8]);
-  add_current(f, ax,  JFZ, e.j[9]);
-  add_current(f, ay,  JFZ, e.j[10]);
-  add_current(f, axy, JFZ, e.j[11]);
+  add_current(f, ii,  JFX, e.j[0], P);
+  add_current(f, ay, JFX, e.j[1], P);
+  add_current(f, az, JFX, e.j[2], P);
+  add_current(f, ayz, JFX, e.j[3], P);
+  add_current(f, ii, JFY, e.j[4], P);
+  add_current(f, az, JFY, e.j[5], P);
+  add_current(f, ax, JFY, e.j[6], P);
+  add_current(f, azx, JFY, e.j[7], P);
+  add_current(f, ii, JFZ, e.j[8], P);
+  add_current(f, ax, JFZ, e.j[9], P);
+  add_current(f, ay, JFZ, e.j[10], P);
+  add_current(f, axy, JFZ, e.j[11], P);
 }
 
 // Performance experiments (VPIC_METAL_DEFINES, see metal_push.mm); none is
@@ -246,7 +254,7 @@ inline void add_edge_current(device atomic_float* f, int ii, int k, float value,
     case 11: off = sy + 1;  break;
     default: off = 0;       break;   // 0, 4, 8: the cell itself
   }
-  add_current(f, ii + off, JFX + ulong(k / 4), value);
+  add_current(f, ii + off, JFX + ulong(k / 4), value, P);
 }
 
 // Add the currents of the streaks that lie in each lane's own cell: in-cell

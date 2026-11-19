@@ -149,4 +149,17 @@ void vpic_metal_advance_b(const vpic_metal_field_args& args);
 void vpic_metal_load_interpolator(const vpic_metal_field_args& args);
 void vpic_metal_clear_jf(const vpic_metal_field_args& args);
 
+// Compact currents. Between begin and end, the Metal push adds currents to a
+// compact GPU array (4 floats per voxel) instead of the 64-byte field records,
+// which cuts the push's memory traffic. advance() opens the window around its
+// species loop in place of clear_jf; end stores the currents into the fields
+// (add false) or adds them (add true, for check mode, which also flushes with
+// add after each checked push). Pushes outside the window write the fields.
+// True unless VPIC_METAL_COMPACT_J=0. advance() uses compact currents only
+// below METAL_COMPACT_J_MAX_PPC particles per voxel (see advance.cc).
+bool vpic_metal_compact_currents_enabled();
+void vpic_metal_begin_compact_currents(size_t nvoxels);
+void vpic_metal_flush_compact_currents(float* fields, size_t nvoxels, bool add);
+void vpic_metal_end_compact_currents(float* fields, size_t nvoxels, bool add);
+
 #endif // _vpic_metal_push_h_

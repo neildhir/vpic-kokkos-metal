@@ -100,3 +100,28 @@ kernel void clear_jf(device float* f [[buffer(0)]],
   f0[F_JFY] = 0;
   f0[F_JFZ] = 0;
 }
+
+// Compact currents (see add_current in advance_p.metal): move each voxel's
+// jx, jy, jz from the compact array into its field record, storing them
+// (P[1] = 0: the step's first currents, replacing clear_jf) or adding them
+// (P[1] = 1), and zero the compact array for the next step.
+kernel void unload_currents(device float* f    [[buffer(0)]],
+                            device float* jacc [[buffer(1)]],
+                            constant uint* P   [[buffer(2)]],
+                            uint v [[thread_position_in_grid]]) {
+  if (v >= P[0]) return;
+  device float* f0 = f + ulong(v) * FIELD_VARS;
+  device float* j0 = jacc + ulong(v) * 4;
+  if (P[1]) {
+    f0[F_JFX] += j0[0];
+    f0[F_JFY] += j0[1];
+    f0[F_JFZ] += j0[2];
+  } else {
+    f0[F_JFX] = j0[0];
+    f0[F_JFY] = j0[1];
+    f0[F_JFZ] = j0[2];
+  }
+  j0[0] = 0;
+  j0[1] = 0;
+  j0[2] = 0;
+}
