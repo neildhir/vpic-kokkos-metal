@@ -1,0 +1,234 @@
+Passing the following non-standard args to kokkos:
+1) 24
+2) 24
+3) 24
+4) 12000000
+5) 40
+6) 20
+
+omp_get_num_threads != n_pipeline (10 != 4)
+-> Setting omp_get_num_threads to be tpp! 4
+
+######### Build Details ##########
+# VPIC Git Hash: 3e0d11e5c6f2bb1a86fc8711ca38eeb7fcac9d45
+# Built on: 2026-11-18T18:33:19
+## CMake options ##
+# ENABLE_INTEGRATED_TESTS: OFF
+# ENABLE_UNIT_TESTS: OFF
+# USE_V4_ALTIVEC: OFF
+# USE_V4_PORTABLE: OFF
+# USE_V4_SSE: OFF
+# ENABLE_OPENSSL: OFF
+# ENABLE_KOKKOS_OPENMP: OFF
+# ENABLE_KOKKOS_CUDA: OFF
+# BUILD_INTERNAL_KOKKOS: OFF
+# VPIC_DUMP_ENERGIES: OFF
+# VPIC_ENABLE_AUTO_TUNING: ON
+# NOTE: Auto tuning may have overwritten what CMake set these as.
+# VPIC_ENABLE_HIERARCHICAL: ON
+# VPIC_ENABLE_TEAM_REDUCTION: ON
+# VPIC_ENABLE_VECTORIZATION: ON
+# VPIC_ENABLE_ACCUMULATOR: OFF
+# Using sort method: standard_sort
+######### End Build Details ########
+
+*** Initializing
+./lpi_bench.deck(275)[0]: ***** Simulation parameters *****
+./lpi_bench.deck(276)[0]: * Processors, topology:          1 = 1x1x1
+./lpi_bench.deck(277)[0]: * Time step (SI), nsteps =       1.21071e-16 40
+./lpi_bench.deck(278)[0]: * Debye length (SI) =            1.28532e-08
+./lpi_bench.deck(279)[0]: * Electron skin depth (SI) =     3.75099e-07
+./lpi_bench.deck(280)[0]: * dx, dy, dz (SI) =              1.11111e-07 5.55556e-08 5.55556e-08
+./lpi_bench.deck(282)[0]: * Field points per Debye =       0.115679 0.231358 0.231358
+./lpi_bench.deck(283)[0]: * Field points per wavelength =  4.743 9.486 9.486
+./lpi_bench.deck(284)[0]: * nx, ny, nz =                   24 24 24
+./lpi_bench.deck(285)[0]: * Physical/macro electron =      91.7737
+./lpi_bench.deck(286)[0]: * Sort interval =                20
+./lpi_bench.deck(287)[0]: * emax at entrance, waist:       3.00732e-08 1.12958e+08
+./lpi_bench.deck(288)[0]: nptotal = 12000000
+./lpi_bench.deck(289)[0]: num_step = 40
+Mallocing 0.0008 GiB for the grid neighbor
+Mallocing 0.2325 GiB for species electron.
+Mallocing 0.0232 GiB for species electron movers.
+Mallocing 0.2325 GiB for species I2.
+Mallocing 0.0232 GiB for species I2 movers.
+Mallocing 0.0013 GiB for the fields
+./lpi_bench.deck(344)[0]: Loading particles
+./lpi_bench.deck(374)[0]: *** Finished with user-specified initialization ***
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(23)[0]: Checking interdomain synchronization
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(25)[0]: Error = 0.000000e+00 (arb units)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(27)[0]: Checking magnetic field divergence
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(30)[0]: RMS error = 0.000000e+00 (charge/volume)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(35)[0]: Initializing radiation damping fields
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(38)[0]: Initializing bound charge density
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(67)[0]: Checking electric field divergence
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(71)[0]: RMS error = 0.000000e+00 (charge/volume)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(74)[0]: Rechecking interdomain synchronization
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(76)[0]: Error = 0.000000e+00 (arb units)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(96)[0]: Uncentering particles
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(105)[0]: Performing initial diagnostics
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/initialize.cc(111)[0]: Initialization complete
+
+                           |      Since Last Update       |     Since Last Restore
+    Operation              | Pct   Time    Count    Per   | Pct   Time    Count    Per
+---------------------------+------------------------------+------------------------------
+                clear_rhof |   0% 1.407e-05 1.0e+00 1.4e-05 |   0% 1.407e-05 1.0e+00 1.4e-05
+          accumulate_rho_p |  11% 6.067e-02 2.0e+00 3.0e-02 |  11% 6.067e-02 2.0e+00 3.0e-02
+           synchronize_rho |   0% 2.100e-04 1.0e+00 2.1e-04 |   0% 2.100e-04 1.0e+00 2.1e-04
+         compute_div_e_err |   0% 2.980e-05 1.0e+00 3.0e-05 |   0% 2.980e-05 1.0e+00 3.0e-05
+     compute_rms_div_e_err |   0% 1.311e-05 1.0e+00 1.3e-05 |   0% 1.311e-05 1.0e+00 1.3e-05
+               clean_div_e |   0% 3.099e-05 1.0e+00 3.1e-05 |   0% 3.099e-05 1.0e+00 3.1e-05
+         compute_div_b_err |   0% 2.885e-05 1.0e+00 2.9e-05 |   0% 2.885e-05 1.0e+00 2.9e-05
+     compute_rms_div_b_err |   0% 1.216e-05 1.0e+00 1.2e-05 |   0% 1.216e-05 1.0e+00 1.2e-05
+######### Run Details ##########
+# MPI Ranks: 1
+# Threads: 4
+## Global:
+               clean_div_b |   0% 4.888e-05 1.0e+00 4.9e-05 |   0% 4.888e-05 1.0e+00 4.9e-05
+ synchronize_tang_e_norm_b |   0% 4.971e-04 2.0e+00 2.5e-04 |   0% 4.971e-04 2.0e+00 2.5e-04
+         load_interpolator |   0% 6.199e-05 1.0e+00 6.2e-05 |   0% 6.199e-05 1.0e+00 6.2e-05
+            compute_curl_b |   0% 3.695e-05 1.0e+00 3.7e-05 |   0% 3.695e-05 1.0e+00 3.7e-05
+              compute_rhob |   0% 3.386e-05 1.0e+00 3.4e-05 |   0% 3.386e-05 1.0e+00 3.4e-05
+                uncenter_p |   3% 1.454e-02 2.0e+00 7.3e-03 |   3% 1.454e-02 2.0e+00 7.3e-03
+       user_initialization |  77% 4.282e-01 1.0e+00 4.3e-01 |  77% 4.282e-01 1.0e+00 4.3e-01
+       FIELD_DATA_MOVEMENT |   0% 3.505e-05 1.0e+00 3.5e-05 |   0% 3.505e-05 1.0e+00 3.5e-05
+    PARTICLE_DATA_MOVEMENT |   3% 1.687e-02 1.0e+00 1.7e-02 |   3% 1.687e-02 1.0e+00 1.7e-02
+    JF_ACCUM_DATA_MOVEMENT |   0% 1.907e-05 1.0e+00 1.9e-05 |   0% 1.907e-05 1.0e+00 1.9e-05
+INTERPOLATOR_DATA_MOVEMENT |   0% 7.987e-05 1.0e+00 8.0e-05 |   0% 7.987e-05 1.0e+00 8.0e-05
+          user_diagnostics |   6% 3.490e-02 1.0e+00 3.5e-02 |   6% 3.490e-02 1.0e+00 3.5e-02
+  # Num Step 40
+  # px 1 py 1 pz 1
+  # gnx 24 gny 24 gnz 24
+  # dx 3.13773e+06 dy 1.56887e+06 dz 1.56887e+06
+  # dt 1.02499e+06 cvac 1 eps0 1
+## Local:
+  # nx 24 ny 24 nz 24
+## Local Particle Species: 2
+  # I2 np 6000000 max_np 7800000
+  # electron np 6000000 max_np 7800000
+######### End Run Details ######
+
+
+*** Advancing
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(100)[0]: Performance sorting "I2"
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(100)[0]: Performance sorting "electron"
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(355)[0]: Divergence cleaning electric field
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(387)[0]: Initial rms error = 1.043405e-20 (charge/volume)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(387)[0]: Cleaned rms error = 4.375319e-21 (charge/volume)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(399)[0]: Divergence cleaning magnetic field
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(409)[0]: Initial rms error = 0.000000e+00 (charge/volume)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(409)[0]: Cleaned rms error = 0.000000e+00 (charge/volume)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(419)[0]: Synchronizing shared tang e, norm b, rho_b
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(422)[0]: Domain desynchronization error = 0.000000e+00 (arb units)
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(436)[0]: Completed step 20 of 40
+
+                           |      Since Last Update       |     Since Last Restore
+    Operation              | Pct   Time    Count    Per   | Pct   Time    Count    Per
+---------------------------+------------------------------+------------------------------
+                 advance_p |  61% 1.899e-01 4.0e+01 4.7e-03 |  22% 1.899e-01 4.0e+01 4.7e-03
+                boundary_p |   0% 2.146e-06 6.0e+01 3.6e-08 |   0% 2.146e-06 6.0e+01 3.6e-08
+                  clear_jf |   0% 2.999e-04 2.0e+01 1.5e-05 |   0% 2.999e-04 2.0e+01 1.5e-05
+            synchronize_jf |   1% 4.301e-03 2.0e+01 2.2e-04 |   0% 4.301e-03 2.0e+01 2.2e-04
+                 advance_b |   1% 1.912e-03 4.0e+01 4.8e-05 |   0% 1.912e-03 4.0e+01 4.8e-05
+                 advance_e |   2% 7.720e-03 2.0e+01 3.9e-04 |   1% 7.720e-03 2.0e+01 3.9e-04
+                clear_rhof |   0% 1.502e-05 1.0e+00 1.5e-05 |   0% 2.909e-05 2.0e+00 1.5e-05
+          accumulate_rho_p |   1% 3.141e-03 1.0e+00 3.1e-03 |   7% 6.381e-02 3.0e+00 2.1e-02
+           synchronize_rho |   0% 1.171e-04 1.0e+00 1.2e-04 |   0% 3.271e-04 2.0e+00 1.6e-04
+         compute_div_e_err |   0% 5.829e-04 2.0e+00 2.9e-04 |   0% 6.127e-04 3.0e+00 2.0e-04
+     compute_rms_div_e_err |   0% 1.669e-04 2.0e+00 8.3e-05 |   0% 1.800e-04 3.0e+00 6.0e-05
+               clean_div_e |   0% 1.590e-04 2.0e+00 8.0e-05 |   0% 1.900e-04 3.0e+00 6.3e-05
+         compute_div_b_err |   0% 5.174e-05 2.0e+00 2.6e-05 |   0% 8.059e-05 3.0e+00 2.7e-05
+     compute_rms_div_b_err |   0% 2.885e-05 2.0e+00 1.4e-05 |   0% 4.101e-05 3.0e+00 1.4e-05
+               clean_div_b |   0% 5.090e-04 2.0e+00 2.5e-04 |   0% 5.579e-04 3.0e+00 1.9e-04
+ synchronize_tang_e_norm_b |   0% 1.709e-04 1.0e+00 1.7e-04 |   0% 6.680e-04 3.0e+00 2.2e-04
+         load_interpolator |   0% 1.012e-03 2.0e+01 5.1e-05 |   0% 1.074e-03 2.1e+01 5.1e-05
+            compute_curl_b |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.695e-05 1.0e+00 3.7e-05
+              compute_rhob |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.386e-05 1.0e+00 3.4e-05
+                uncenter_p |   0% 0.000e+00 0.0e+00 0.0e+00 |   2% 1.454e-02 2.0e+00 7.3e-03
+       user_initialization |   0% 0.000e+00 0.0e+00 0.0e+00 |  49% 4.282e-01 1.0e+00 4.3e-01
+      user_field_injection |   0% 2.089e-04 2.0e+01 1.0e-05 |   0% 2.089e-04 2.0e+01 1.0e-05
+            sort_particles |  30% 9.298e-02 2.0e+01 4.6e-03 |  11% 9.298e-02 2.0e+01 4.6e-03
+    field_sa_contributions |   0% 3.815e-06 2.0e+01 1.9e-07 |   0% 3.815e-06 2.0e+01 1.9e-07
+       FIELD_DATA_MOVEMENT |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.505e-05 1.0e+00 3.5e-05
+    PARTICLE_DATA_MOVEMENT |   1% 2.230e-03 1.0e+02 2.2e-05 |   2% 1.910e-02 1.0e+02 1.9e-04
+    JF_ACCUM_DATA_MOVEMENT |   0% 2.944e-04 2.0e+01 1.5e-05 |   0% 3.135e-04 2.1e+01 1.5e-05
+INTERPOLATOR_DATA_MOVEMENT |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 7.987e-05 1.0e+00 8.0e-05
+                  BACKFILL |   1% 1.653e-03 4.0e+01 4.1e-05 |   0% 1.653e-03 4.0e+01 4.1e-05
+          user_diagnostics |   1% 4.548e-03 1.9e+01 2.4e-04 |   5% 3.945e-02 2.0e+01 2.0e-03
+
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(100)[0]: Performance sorting "I2"
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(100)[0]: Performance sorting "electron"
+/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/src/vpic/advance.cc(436)[0]: Completed step 40 of 40
+
+                           |      Since Last Update       |     Since Last Restore
+    Operation              | Pct   Time    Count    Per   | Pct   Time    Count    Per
+---------------------------+------------------------------+------------------------------
+                 advance_p |  78% 1.841e-01 4.0e+01 4.6e-03 |  34% 3.740e-01 8.0e+01 4.7e-03
+                boundary_p |   0% 0.000e+00 6.0e+01 0.0e+00 |   0% 2.146e-06 1.2e+02 1.8e-08
+                  clear_jf |   0% 2.949e-04 2.0e+01 1.5e-05 |   0% 5.949e-04 4.0e+01 1.5e-05
+            synchronize_jf |   2% 4.091e-03 2.0e+01 2.0e-04 |   1% 8.391e-03 4.0e+01 2.1e-04
+                 advance_b |   1% 1.888e-03 4.0e+01 4.7e-05 |   0% 3.800e-03 8.0e+01 4.8e-05
+                 advance_e |   3% 7.300e-03 2.0e+01 3.6e-04 |   1% 1.502e-02 4.0e+01 3.8e-04
+                clear_rhof |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 2.909e-05 2.0e+00 1.5e-05
+          accumulate_rho_p |   0% 0.000e+00 0.0e+00 0.0e+00 |   6% 6.381e-02 3.0e+00 2.1e-02
+           synchronize_rho |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.271e-04 2.0e+00 1.6e-04
+         compute_div_e_err |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 6.127e-04 3.0e+00 2.0e-04
+     compute_rms_div_e_err |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 1.800e-04 3.0e+00 6.0e-05
+               clean_div_e |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 1.900e-04 3.0e+00 6.3e-05
+         compute_div_b_err |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 8.059e-05 3.0e+00 2.7e-05
+     compute_rms_div_b_err |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 4.101e-05 3.0e+00 1.4e-05
+               clean_div_b |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 5.579e-04 3.0e+00 1.9e-04
+ synchronize_tang_e_norm_b |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 6.680e-04 3.0e+00 2.2e-04
+         load_interpolator |   0% 9.742e-04 2.0e+01 4.9e-05 |   0% 2.048e-03 4.1e+01 5.0e-05
+            compute_curl_b |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.695e-05 1.0e+00 3.7e-05
+              compute_rhob |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.386e-05 1.0e+00 3.4e-05
+                uncenter_p |   0% 0.000e+00 0.0e+00 0.0e+00 |   1% 1.454e-02 2.0e+00 7.3e-03
+       user_initialization |   0% 0.000e+00 0.0e+00 0.0e+00 |  39% 4.282e-01 1.0e+00 4.3e-01
+      user_field_injection |   0% 1.955e-04 2.0e+01 9.8e-06 |   0% 4.044e-04 4.0e+01 1.0e-05
+            sort_particles |  10% 2.467e-02 2.0e+01 1.2e-03 |  11% 1.176e-01 4.0e+01 2.9e-03
+    field_sa_contributions |   0% 5.960e-06 2.0e+01 3.0e-07 |   0% 9.775e-06 4.0e+01 2.4e-07
+       FIELD_DATA_MOVEMENT |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.505e-05 1.0e+00 3.5e-05
+    PARTICLE_DATA_MOVEMENT |   1% 2.306e-03 1.0e+02 2.3e-05 |   2% 2.141e-02 2.0e+02 1.1e-04
+    JF_ACCUM_DATA_MOVEMENT |   0% 2.835e-04 2.0e+01 1.4e-05 |   0% 5.970e-04 4.1e+01 1.5e-05
+INTERPOLATOR_DATA_MOVEMENT |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 7.987e-05 1.0e+00 8.0e-05
+                  BACKFILL |   1% 1.592e-03 4.0e+01 4.0e-05 |   0% 3.245e-03 8.0e+01 4.1e-05
+          user_diagnostics |   4% 9.055e-03 2.0e+01 4.5e-04 |   4% 4.851e-02 4.0e+01 1.2e-03
+
+*** Done (0.55343s / 0w:0d:0h:0m:0s elapsed)
+*** Cleaning up
+
+                           |      Since Last Update       |     Since Last Restore
+    Operation              | Pct   Time    Count    Per   | Pct   Time    Count    Per
+---------------------------+------------------------------+------------------------------
+                 advance_p |   0% 0.000e+00 0.0e+00 0.0e+00 |  34% 3.740e-01 8.0e+01 4.7e-03
+                boundary_p |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 2.146e-06 1.2e+02 1.8e-08
+                  clear_jf |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 5.949e-04 4.0e+01 1.5e-05
+            synchronize_jf |   0% 0.000e+00 0.0e+00 0.0e+00 |   1% 8.391e-03 4.0e+01 2.1e-04
+                 advance_b |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.800e-03 8.0e+01 4.8e-05
+                 advance_e |   0% 0.000e+00 0.0e+00 0.0e+00 |   1% 1.502e-02 4.0e+01 3.8e-04
+                clear_rhof |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 2.909e-05 2.0e+00 1.5e-05
+          accumulate_rho_p |   0% 0.000e+00 0.0e+00 0.0e+00 |   6% 6.381e-02 3.0e+00 2.1e-02
+           synchronize_rho |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.271e-04 2.0e+00 1.6e-04
+         compute_div_e_err |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 6.127e-04 3.0e+00 2.0e-04
+     compute_rms_div_e_err |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 1.800e-04 3.0e+00 6.0e-05
+               clean_div_e |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 1.900e-04 3.0e+00 6.3e-05
+         compute_div_b_err |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 8.059e-05 3.0e+00 2.7e-05
+     compute_rms_div_b_err |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 4.101e-05 3.0e+00 1.4e-05
+               clean_div_b |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 5.579e-04 3.0e+00 1.9e-04
+ synchronize_tang_e_norm_b |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 6.680e-04 3.0e+00 2.2e-04
+         load_interpolator |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 2.048e-03 4.1e+01 5.0e-05
+            compute_curl_b |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.695e-05 1.0e+00 3.7e-05
+              compute_rhob |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.386e-05 1.0e+00 3.4e-05
+                uncenter_p |   0% 0.000e+00 0.0e+00 0.0e+00 |   1% 1.454e-02 2.0e+00 7.3e-03
+       user_initialization |   0% 0.000e+00 0.0e+00 0.0e+00 |  39% 4.282e-01 1.0e+00 4.3e-01
+      user_field_injection |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 4.044e-04 4.0e+01 1.0e-05
+            sort_particles |   0% 0.000e+00 0.0e+00 0.0e+00 |  11% 1.176e-01 4.0e+01 2.9e-03
+    field_sa_contributions |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 9.775e-06 4.0e+01 2.4e-07
+       FIELD_DATA_MOVEMENT |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.505e-05 1.0e+00 3.5e-05
+    PARTICLE_DATA_MOVEMENT |   0% 0.000e+00 0.0e+00 0.0e+00 |   2% 2.141e-02 2.0e+02 1.1e-04
+    JF_ACCUM_DATA_MOVEMENT |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 5.970e-04 4.1e+01 1.5e-05
+INTERPOLATOR_DATA_MOVEMENT |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 7.987e-05 1.0e+00 8.0e-05
+                  BACKFILL |   0% 0.000e+00 0.0e+00 0.0e+00 |   0% 3.245e-03 8.0e+01 4.1e-05
+          user_diagnostics |  100% 4.500e-03 1.0e+00 4.5e-03 |   5% 5.301e-02 4.1e+01 1.3e-03
+
+normal exit

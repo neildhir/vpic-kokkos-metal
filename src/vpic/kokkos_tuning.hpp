@@ -79,5 +79,18 @@
   #define SORT standard_sort
 #endif
 
+// A build can override the sort order (CMake VPIC_SORT_ORDER)
+#if defined(VPIC_SORT_ORDER_STANDARD)
+  #undef DEFAULT_SORT_ORDER
+  #undef SORT
+  #define DEFAULT_SORT_ORDER StandardSortOrder
+  #define SORT standard_sort
+#elif defined(VPIC_SORT_ORDER_STRIDED)
+  #undef DEFAULT_SORT_ORDER
+  #undef SORT
+  #define DEFAULT_SORT_ORDER StridedSortOrder
+  #define SORT strided_sort
+#endif
+
 #endif // _kokkos_tuning_h_
 

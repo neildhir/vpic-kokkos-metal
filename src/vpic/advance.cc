@@ -3,8 +3,77 @@
 #include "../particle_operations/sort.h"
 #include <Kokkos_Sort.hpp>
 
+#ifdef VPIC_ENABLE_METAL
+#include "../metal/metal_push.h"
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <type_traits>
+#include <vector>
+#endif
+
 #define FAK field_array->kernel
 //#define DUMP_ENERGIES
+
+#ifdef VPIC_ENABLE_METAL
+// Sort a species on the GPU. Returns false (sort on the CPU instead) unless
+// this build sorts particles by cell, the order the GPU sort implements, and
+// VPIC_METAL_SORT is not 0. VPIC_METAL_SORT_CHECK=1 also runs the CPU sort
+// from the same state and reports any difference: the cell sequence must be
+// identical, and each cell must hold the same particles (their order within
+// a cell is not deterministic on either side).
+static bool
+metal_sort_species( species_t * sp, const grid_t * g, ParticleSorter<> * sorter ) {
+  if constexpr( !std::is_same_v<DEFAULT_SORT_ORDER, StandardSortOrder> ) {
+    return false;
+  } else {
+    if( !vpic_metal_sort_enabled() ) return false;
+    Kokkos::fence();   // the GPU sorts arrays Kokkos kernels may just have written
+    const vpic_metal_sort_args a{ sp->k_p_d.data(), size_t( sp->k_p_d.stride(1) ), sp->k_p_d.extent(0),
+                                  sp->k_p_i_d.data(), sp->np, size_t( g->nv ) };
+    if( !vpic_metal_sort_check_enabled() ) {
+      vpic_metal_sort_particles( a );
+      return true;
+    }
+
+    const size_t np = sp->np;
+    const auto p0 = k_host_clone( sp->k_p_d );
+    const auto cells0 = k_host_clone( sp->k_p_i_d );
+    sorter->sort( sp->k_p_d, sp->k_p_i_d, np, g->nv );
+    const auto p_cpu = k_host_clone( sp->k_p_d );
+    const auto i_cpu = k_host_clone( sp->k_p_i_d );
+    Kokkos::deep_copy( sp->k_p_d, p0 );
+    Kokkos::deep_copy( sp->k_p_i_d, cells0 );
+    vpic_metal_sort_particles( a );
+
+    size_t cells_differ = 0, particles_differ = 0;
+    for( size_t i=0; i<np; i++ ) if( i_cpu(i)!=sp->k_p_i_d(i) ) cells_differ++;
+    if( cells_differ==0 ) {
+      using Row = std::array<uint32_t, PARTICLE_VAR_COUNT>;   // bit patterns
+      auto row = []( const auto& p, size_t i ) {
+        Row r;
+        for( int v=0; v<PARTICLE_VAR_COUNT; v++ ) { const float f = p(i,v); std::memcpy( &r[v], &f, sizeof f ); }
+        return r;
+      };
+      std::vector<Row> x, y;
+      for( size_t b=0; b<np; ) {
+        size_t e = b;
+        while( e<np && i_cpu(e)==i_cpu(b) ) e++;
+        x.clear(); y.clear();
+        for( size_t i=b; i<e; i++ ) { x.push_back( row( p_cpu, i ) ); y.push_back( row( sp->k_p_d, i ) ); }
+        std::sort( x.begin(), x.end() );
+        std::sort( y.begin(), y.end() );
+        for( size_t k=0; k<x.size(); k++ ) if( x[k]!=y[k] ) particles_differ++;
+        b = e;
+      }
+    }
+    MESSAGE(( "Metal sort check \"%s\": %zu particles, %zu cell indices differ, "
+              "%zu particles differ within their cell", sp->name, np, cells_differ, particles_differ ));
+    return true;
+  }
+}
+#endif
 
 int vpic_simulation::advance(void)
 {
@@ -29,6 +98,9 @@ int vpic_simulation::advance(void)
       if( (sp->sort_interval>0) && ((step() % sp->sort_interval)==0) )
       {
           if( rank()==0 ) MESSAGE(( "Performance sorting \"%s\"", sp->name ));
+#ifdef VPIC_ENABLE_METAL
+          if( !metal_sort_species( sp, grid, sorter ) )
+#endif
           sorter->sort( sp->k_p_d, sp->k_p_i_d, sp->np, grid->nv);
       }
   }

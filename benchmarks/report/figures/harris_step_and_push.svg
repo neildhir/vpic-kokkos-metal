@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="root" width="880" height="262" viewBox="0 0 880 262" role="img" aria-label="Reconnection deck: CPU build vs Metal GPU build">
+<title>Reconnection deck: CPU build vs Metal GPU build</title>
+<style>
+.root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.surface { fill: #fcfcfb; }
+.ink { fill: #0b0b0b; }
+.ink2 { fill: #52514e; }
+.muted { fill: #898781; }
+.grid { stroke: #e1e0d9; stroke-width: 1; }
+.axis { stroke: #c3c2b7; stroke-width: 1; }
+.whisker { stroke: #52514e; stroke-width: 1.5; }
+.ref { fill: none; stroke: #52514e; stroke-width: 1.5; }
+.s0 { fill: #2a78d6; stroke: #2a78d6; }
+.s1 { fill: #eb6834; stroke: #eb6834; }
+.s2 { fill: #1baf7a; stroke: #1baf7a; }
+path.line, line.line { fill: none; stroke-width: 2; }  /* beats .sN in both modes */
+.ring { stroke: #fcfcfb; stroke-width: 2; }
+@media (prefers-color-scheme: dark) {
+  .surface { fill: #1a1a19; }
+  .ink { fill: #f0efec; }
+  .ink2 { fill: #c3c2b7; }
+  .grid { stroke: #2c2c2a; }
+  .axis { stroke: #383835; }
+  .whisker, .ref { stroke: #c3c2b7; }
+  .s0 { fill: #3987e5; stroke: #3987e5; }
+  .s1 { fill: #d95926; stroke: #d95926; }
+  .s2 { fill: #199e70; stroke: #199e70; }
+  .ring { stroke: #1a1a19; }
+}
+</style>
+<rect class="surface" x="0" y="0" width="880" height="262"/>
+<text class="ink" x="92.0" y="26.0" font-size="16" font-weight="600" text-anchor="start">Reconnection deck: CPU build vs Metal GPU build</text>
+<text class="ink2" x="92.0" y="46.0" font-size="12" font-weight="400" text-anchor="start">MacBook Pro (Mac16,1) · Apple M4 · CPU 10 (4P+6E) · GPU 10-core · 16 GiB · macOS 27.2.1 · 20261118-194421-m4-post-opt-sorted-repeat</text>
+<line class="grid" x1="92.0" x2="92.0" y1="64" y2="164"/>
+<text class="muted" x="92.0" y="180.0" font-size="11" font-weight="400" text-anchor="middle">0</text>
+<line class="grid" x1="157.0" x2="157.0" y1="64" y2="164"/>
+<text class="muted" x="157.0" y="180.0" font-size="11" font-weight="400" text-anchor="middle">25</text>
+<line class="grid" x1="222.0" x2="222.0" y1="64" y2="164"/>
+<text class="muted" x="222.0" y="180.0" font-size="11" font-weight="400" text-anchor="middle">50</text>
+<line class="grid" x1="287.0" x2="287.0" y1="64" y2="164"/>
+<text class="muted" x="287.0" y="180.0" font-size="11" font-weight="400" text-anchor="middle">75</text>
+<line class="grid" x1="352.0" x2="352.0" y1="64" y2="164"/>
+<text class="muted" x="352.0" y="180.0" font-size="11" font-weight="400" text-anchor="middle">100</text>
+<line class="grid" x1="417.0" x2="417.0" y1="64" y2="164"/>
+<text class="muted" x="417.0" y="180.0" font-size="11" font-weight="400" text-anchor="middle">125</text>
+<line class="axis" x1="92" x2="92" y1="64" y2="164"/>
+<text class="ink2" x="264.0" y="200.0" font-size="12" font-weight="400" text-anchor="middle">Steady time per step [ms]</text>
+<text class="ink" x="82.0" y="93.0" font-size="12" font-weight="400" text-anchor="end">2d-small</text>
+<path class="s0" stroke="none" d="M92.0,73.0 H337.3 Q341.3,73.0 341.3,77.0 V83.0 Q341.3,87.0 337.3,87.0 H92.0 Z"><title>2d-small · cpu (CPU, 8×1 ranks×threads): 95.88 ms (range 94.76-98)</title></path>
+<line class="whisker" x1="338.4" x2="346.8" y1="80.0" y2="80.0"/>
+<path class="s1" stroke="none" d="M92.0,89.0 H191.4 Q195.4,89.0 195.4,93.0 V99.0 Q195.4,103.0 191.4,103.0 H92.0 Z"><title>2d-small · metal (GPU, 1×4 ranks×threads): 39.76 ms (range 39.69-39.85)</title></path>
+<line class="whisker" x1="195.2" x2="195.6" y1="96.0" y2="96.0"/>
+<text class="ink2" x="201.6" y="100.0" font-size="11" font-weight="400" text-anchor="start">2.41× faster</text>
+<text class="ink" x="82.0" y="143.0" font-size="12" font-weight="400" text-anchor="end">3d-small</text>
+<path class="s0" stroke="none" d="M92.0,123.0 H245.1 Q249.1,123.0 249.1,127.0 V133.0 Q249.1,137.0 245.1,137.0 H92.0 Z"><title>3d-small · cpu (CPU, 8×1 ranks×threads): 60.43 ms (range 59.78-61.52)</title></path>
+<line class="whisker" x1="247.4" x2="252.0" y1="130.0" y2="130.0"/>
+<path class="s1" stroke="none" d="M92.0,139.0 H152.4 Q156.4,139.0 156.4,143.0 V149.0 Q156.4,153.0 152.4,153.0 H92.0 Z"><title>3d-small · metal (GPU, 1×4 ranks×threads): 24.78 ms (range 24.78-24.88)</title></path>
+<line class="whisker" x1="156.4" x2="156.7" y1="146.0" y2="146.0"/>
+<text class="ink2" x="162.7" y="150.0" font-size="11" font-weight="400" text-anchor="start">2.44× faster</text>
+<line class="grid" x1="508.0" x2="508.0" y1="64" y2="164"/>
+<text class="muted" x="508.0" y="180.0" font-size="11" font-weight="400" text-anchor="middle">0</text>
+<line class="grid" x1="599.7" x2="599.7" y1="64" y2="164"/>
+<text class="muted" x="599.7" y="180.0" font-size="11" font-weight="400" text-anchor="middle">1</text>
+<line class="grid" x1="691.4" x2="691.4" y1="64" y2="164"/>
+<text class="muted" x="691.4" y="180.0" font-size="11" font-weight="400" text-anchor="middle">2</text>
+<line class="grid" x1="783.1" x2="783.1" y1="64" y2="164"/>
+<text class="muted" x="783.1" y="180.0" font-size="11" font-weight="400" text-anchor="middle">3</text>
+<line class="axis" x1="508" x2="508" y1="64" y2="164"/>
+<text class="ink2" x="680.0" y="200.0" font-size="12" font-weight="400" text-anchor="middle">Particle push [ns per particle]</text>
+<path class="s0" stroke="none" d="M508.0,73.0 H757.4 Q761.4,73.0 761.4,77.0 V83.0 Q761.4,87.0 757.4,87.0 H508.0 Z"><title>2d-small · cpu (CPU, 8×1 ranks×threads): 2.764 ns (range 2.716-2.779)</title></path>
+<line class="whisker" x1="757.0" x2="762.8" y1="80.0" y2="80.0"/>
+<path class="s1" stroke="none" d="M508.0,89.0 H598.5 Q602.5,89.0 602.5,93.0 V99.0 Q602.5,103.0 598.5,103.0 H508.0 Z"><title>2d-small · metal (GPU, 1×4 ranks×threads): 1.03 ns (range 1.029-1.033)</title></path>
+<line class="whisker" x1="602.3" x2="602.7" y1="96.0" y2="96.0"/>
+<text class="ink2" x="608.7" y="100.0" font-size="11" font-weight="400" text-anchor="start">2.68× faster</text>
+<path class="s0" stroke="none" d="M508.0,123.0 H751.6 Q755.6,123.0 755.6,127.0 V133.0 Q755.6,137.0 751.6,137.0 H508.0 Z"><title>3d-small · cpu (CPU, 8×1 ranks×threads): 2.7 ns (range 2.662-2.736)</title></path>
+<line class="whisker" x1="752.1" x2="758.9" y1="130.0" y2="130.0"/>
+<path class="s1" stroke="none" d="M508.0,139.0 H609.8 Q613.8,139.0 613.8,143.0 V149.0 Q613.8,153.0 609.8,153.0 H508.0 Z"><title>3d-small · metal (GPU, 1×4 ranks×threads): 1.154 ns (range 1.148-1.155)</title></path>
+<line class="whisker" x1="613.2" x2="613.9" y1="146.0" y2="146.0"/>
+<text class="ink2" x="619.9" y="150.0" font-size="11" font-weight="400" text-anchor="start">2.34× faster</text>
+<rect class="s0" stroke="none" x="92" y="220" width="14" height="10" rx="2"/>
+<text class="ink" x="116.0" y="229.0" font-size="12" font-weight="400" text-anchor="start">cpu (CPU, 8×1 ranks×threads)</text>
+<rect class="s1" stroke="none" x="336" y="220" width="14" height="10" rx="2"/>
+<text class="ink" x="360.0" y="229.0" font-size="12" font-weight="400" text-anchor="start">metal (GPU, 1×4 ranks×threads)</text>
+</svg>

@@ -54,7 +54,10 @@ compute_rms_div_e_err_kokkos( const field_array_t * RESTRICT fa ) {
 //  pipeline_args_t args[1];
 //  const field_t * f, * f0;
   const grid_t * RESTRICT g;
-  double err = 0, temp_err = 0, local[2], global[2];
+  // The reductions run in k_wide_float_t (float on GPUs without FP64); the
+  // host adds their results in double
+  double err = 0, local[2], global[2];
+  k_wide_float_t temp_err = 0;
   int nx, ny, nz;
 
   if( !fa ) ERROR(( "Bad args" ));
@@ -87,10 +90,13 @@ compute_rms_div_e_err_kokkos( const field_array_t * RESTRICT fa ) {
 //  EXEC_PIPELINES( compute_rms_div_e_err, args, 0 );
 
     Kokkos::MDRangePolicy<Kokkos::Rank<3>> policy_zyx({2,2,2}, {nz+1,ny+1,nx+1});
-    Kokkos::parallel_reduce("compute_rms_div_e_err", policy_zyx, KOKKOS_LAMBDA(const int z, const int y, const int x, double& error) {
-        double div_e_err = static_cast<double>(k_field(VOXEL(x,y,z,nx,ny,nz), field_var::div_e_err));
+    Kokkos::parallel_reduce("compute_rms_div_e_err", policy_zyx, KOKKOS_LAMBDA(const int z, const int y, const int x, k_wide_float_t& error) {
+        k_wide_float_t div_e_err = static_cast<k_wide_float_t>(k_field(VOXEL(x,y,z,nx,ny,nz), field_var::div_e_err));
         error += div_e_err*div_e_err;
-    },err);
+    },temp_err);
+
+    err += temp_err;
+    temp_err = 0.0;
 
   // Have the host accumulate the exterior of the local domain
 
@@ -121,28 +127,28 @@ compute_rms_div_e_err_kokkos( const field_array_t * RESTRICT fa ) {
     Kokkos::MDRangePolicy<Kokkos::Rank<2>> policy_zx({2,2}, {nz+1,nx+1});
     Kokkos::MDRangePolicy<Kokkos::Rank<2>> policy_xy({2,2}, {nx+1,ny+1});
 
-    Kokkos::parallel_reduce("compute_rms_div_e_err", policy_yz, KOKKOS_LAMBDA(const int y, const int z, double& error) {
-        double div_e_err_1 = static_cast<double>(k_field(VOXEL(1,y,z,nx,ny,nz), field_var::div_e_err));
-        double div_e_err_2 = static_cast<double>(k_field(VOXEL(nx+1,y,z,nx,ny,nz), field_var::div_e_err));
-        error += 0.5*static_cast<double>(div_e_err_1)*static_cast<double>(div_e_err_1) + 0.5*static_cast<double>(div_e_err_2)*static_cast<double>(div_e_err_2);
+    Kokkos::parallel_reduce("compute_rms_div_e_err", policy_yz, KOKKOS_LAMBDA(const int y, const int z, k_wide_float_t& error) {
+        k_wide_float_t div_e_err_1 = static_cast<k_wide_float_t>(k_field(VOXEL(1,y,z,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t div_e_err_2 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1,y,z,nx,ny,nz), field_var::div_e_err));
+        error += k_wide_float_t(0.5)*static_cast<k_wide_float_t>(div_e_err_1)*static_cast<k_wide_float_t>(div_e_err_1) + k_wide_float_t(0.5)*static_cast<k_wide_float_t>(div_e_err_2)*static_cast<k_wide_float_t>(div_e_err_2);
     },temp_err);
 
     err += temp_err;
     temp_err = 0.0;
 
-    Kokkos::parallel_reduce("compute_rms_div_e_err", policy_zx, KOKKOS_LAMBDA(const int z, const int x, double& error) {
-        double div_e_err_1 = static_cast<double>(k_field(VOXEL(x,1,z,nx,ny,nz), field_var::div_e_err));
-        double div_e_err_2 = static_cast<double>(k_field(VOXEL(x,ny+1,z,nx,ny,nz), field_var::div_e_err));
-        error += 0.5*static_cast<double>(div_e_err_1)*static_cast<double>(div_e_err_1) + 0.5*static_cast<double>(div_e_err_2)*static_cast<double>(div_e_err_2);
+    Kokkos::parallel_reduce("compute_rms_div_e_err", policy_zx, KOKKOS_LAMBDA(const int z, const int x, k_wide_float_t& error) {
+        k_wide_float_t div_e_err_1 = static_cast<k_wide_float_t>(k_field(VOXEL(x,1,z,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t div_e_err_2 = static_cast<k_wide_float_t>(k_field(VOXEL(x,ny+1,z,nx,ny,nz), field_var::div_e_err));
+        error += k_wide_float_t(0.5)*static_cast<k_wide_float_t>(div_e_err_1)*static_cast<k_wide_float_t>(div_e_err_1) + k_wide_float_t(0.5)*static_cast<k_wide_float_t>(div_e_err_2)*static_cast<k_wide_float_t>(div_e_err_2);
     },temp_err);
 
     err += temp_err;
     temp_err = 0.0;
 
-    Kokkos::parallel_reduce("compute_rms_div_e_err", policy_xy, KOKKOS_LAMBDA(const int x, const int y, double& error) {
-        double div_e_err_1 = static_cast<double>(k_field(VOXEL(x,y,1,nx,ny,nz), field_var::div_e_err));
-        double div_e_err_2 = static_cast<double>(k_field(VOXEL(x,y,nz+1,nx,ny,nz), field_var::div_e_err));
-        error += 0.5*static_cast<double>(div_e_err_1)*static_cast<double>(div_e_err_1) + 0.5*static_cast<double>(div_e_err_2)*static_cast<double>(div_e_err_2);
+    Kokkos::parallel_reduce("compute_rms_div_e_err", policy_xy, KOKKOS_LAMBDA(const int x, const int y, k_wide_float_t& error) {
+        k_wide_float_t div_e_err_1 = static_cast<k_wide_float_t>(k_field(VOXEL(x,y,1,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t div_e_err_2 = static_cast<k_wide_float_t>(k_field(VOXEL(x,y,nz+1,nx,ny,nz), field_var::div_e_err));
+        error += k_wide_float_t(0.5)*static_cast<k_wide_float_t>(div_e_err_1)*static_cast<k_wide_float_t>(div_e_err_1) + k_wide_float_t(0.5)*static_cast<k_wide_float_t>(div_e_err_2)*static_cast<k_wide_float_t>(div_e_err_2);
     },temp_err);
 
     err += temp_err;
@@ -173,34 +179,34 @@ compute_rms_div_e_err_kokkos( const field_array_t * RESTRICT fa ) {
     f0 = &f(nx+1,ny+1,   z); err += 0.25*(double)f0->div_e_err*(double)f0->div_e_err;
   }
 */
-    Kokkos::parallel_reduce("compute_rms_div_e_err", Kokkos::RangePolicy<>(2,nx+1), KOKKOS_LAMBDA(const int x, double& error) {
-        double edge1 = static_cast<double>(k_field(VOXEL(x, 1,    1,    nx,ny,nz), field_var::div_e_err));
-        double edge2 = static_cast<double>(k_field(VOXEL(x, ny+1, 1,    nx,ny,nz), field_var::div_e_err));
-        double edge3 = static_cast<double>(k_field(VOXEL(x, 1,    nz+1, nx,ny,nz), field_var::div_e_err));
-        double edge4 = static_cast<double>(k_field(VOXEL(x, ny+1, nz+1, nx,ny,nz), field_var::div_e_err));
-        error += 0.25*edge1*edge1 + 0.25*edge2*edge2 + 0.25*edge3*edge3 + 0.25*edge4*edge4;
+    Kokkos::parallel_reduce("compute_rms_div_e_err", Kokkos::RangePolicy<>(2,nx+1), KOKKOS_LAMBDA(const int x, k_wide_float_t& error) {
+        k_wide_float_t edge1 = static_cast<k_wide_float_t>(k_field(VOXEL(x, 1,    1,    nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge2 = static_cast<k_wide_float_t>(k_field(VOXEL(x, ny+1, 1,    nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge3 = static_cast<k_wide_float_t>(k_field(VOXEL(x, 1,    nz+1, nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge4 = static_cast<k_wide_float_t>(k_field(VOXEL(x, ny+1, nz+1, nx,ny,nz), field_var::div_e_err));
+        error += k_wide_float_t(0.25)*edge1*edge1 + k_wide_float_t(0.25)*edge2*edge2 + k_wide_float_t(0.25)*edge3*edge3 + k_wide_float_t(0.25)*edge4*edge4;
     },temp_err);
 
     err += temp_err;
     temp_err = 0.0;
 
-    Kokkos::parallel_reduce("compute_rms_div_e_err", Kokkos::RangePolicy<>(2,ny+1), KOKKOS_LAMBDA(const int y, double& error) {
-        double edge1 = static_cast<double>(k_field(VOXEL(   1, y,    1, nx,ny,nz), field_var::div_e_err));
-        double edge2 = static_cast<double>(k_field(VOXEL(   1, y, nz+1, nx,ny,nz), field_var::div_e_err));
-        double edge3 = static_cast<double>(k_field(VOXEL(nx+1, y,    1, nx,ny,nz), field_var::div_e_err));
-        double edge4 = static_cast<double>(k_field(VOXEL(nx+1, y, nz+1, nx,ny,nz), field_var::div_e_err));
-        error += 0.25*edge1*edge1 + 0.25*edge2*edge2 + 0.25*edge3*edge3 + 0.25*edge4*edge4;
+    Kokkos::parallel_reduce("compute_rms_div_e_err", Kokkos::RangePolicy<>(2,ny+1), KOKKOS_LAMBDA(const int y, k_wide_float_t& error) {
+        k_wide_float_t edge1 = static_cast<k_wide_float_t>(k_field(VOXEL(   1, y,    1, nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge2 = static_cast<k_wide_float_t>(k_field(VOXEL(   1, y, nz+1, nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge3 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1, y,    1, nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge4 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1, y, nz+1, nx,ny,nz), field_var::div_e_err));
+        error += k_wide_float_t(0.25)*edge1*edge1 + k_wide_float_t(0.25)*edge2*edge2 + k_wide_float_t(0.25)*edge3*edge3 + k_wide_float_t(0.25)*edge4*edge4;
     },temp_err);
 
     err += temp_err;
     temp_err = 0.0;
 
-    Kokkos::parallel_reduce("compute_rms_div_e_err", Kokkos::RangePolicy<>(2,nz+1), KOKKOS_LAMBDA(const int z, double& error) {
-        double edge1 = static_cast<double>(k_field(VOXEL(   1, 1,    z, nx,ny,nz), field_var::div_e_err));
-        double edge2 = static_cast<double>(k_field(VOXEL(nx+1, 1,    z, nx,ny,nz), field_var::div_e_err));
-        double edge3 = static_cast<double>(k_field(VOXEL(   1, ny+1, z, nx,ny,nz), field_var::div_e_err));
-        double edge4 = static_cast<double>(k_field(VOXEL(nx+1, ny+1, z, nx,ny,nz), field_var::div_e_err));
-        error += 0.25*edge1*edge1 + 0.25*edge2*edge2 + 0.25*edge3*edge3 + 0.25*edge4*edge4;
+    Kokkos::parallel_reduce("compute_rms_div_e_err", Kokkos::RangePolicy<>(2,nz+1), KOKKOS_LAMBDA(const int z, k_wide_float_t& error) {
+        k_wide_float_t edge1 = static_cast<k_wide_float_t>(k_field(VOXEL(   1, 1,    z, nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge2 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1, 1,    z, nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge3 = static_cast<k_wide_float_t>(k_field(VOXEL(   1, ny+1, z, nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t edge4 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1, ny+1, z, nx,ny,nz), field_var::div_e_err));
+        error += k_wide_float_t(0.25)*edge1*edge1 + k_wide_float_t(0.25)*edge2*edge2 + k_wide_float_t(0.25)*edge3*edge3 + k_wide_float_t(0.25)*edge4*edge4;
     },temp_err);
 
     err += temp_err;
@@ -218,17 +224,17 @@ compute_rms_div_e_err_kokkos( const field_array_t * RESTRICT fa ) {
   f0 = &f(   1,ny+1,nz+1); err += 0.125*(double)f0->div_e_err*(double)f0->div_e_err;
   f0 = &f(nx+1,ny+1,nz+1); err += 0.125*(double)f0->div_e_err*(double)f0->div_e_err;
 */
-    Kokkos::parallel_reduce("exterior corners", Kokkos::RangePolicy<>(0,1), KOKKOS_LAMBDA(const int i, double& error) {
-        double corner0 = static_cast<double>(k_field(VOXEL(   1,    1,    1,nx,ny,nz), field_var::div_e_err));
-        double corner1 = static_cast<double>(k_field(VOXEL(nx+1,    1,    1,nx,ny,nz), field_var::div_e_err));
-        double corner2 = static_cast<double>(k_field(VOXEL(   1, ny+1,    1,nx,ny,nz), field_var::div_e_err));
-        double corner3 = static_cast<double>(k_field(VOXEL(nx+1, ny+1,    1,nx,ny,nz), field_var::div_e_err));
-        double corner4 = static_cast<double>(k_field(VOXEL(   1,    1, nz+1,nx,ny,nz), field_var::div_e_err));
-        double corner5 = static_cast<double>(k_field(VOXEL(nx+1,    1, nz+1,nx,ny,nz), field_var::div_e_err));
-        double corner6 = static_cast<double>(k_field(VOXEL(   1, ny+1, nz+1,nx,ny,nz), field_var::div_e_err));
-        double corner7 = static_cast<double>(k_field(VOXEL(nx+1, ny+1, nz+1,nx,ny,nz), field_var::div_e_err));
-        error += 0.125*corner0*corner0 + 0.125*corner1*corner1 + 0.125*corner2*corner2 + 0.125*corner3*corner3 +
-                0.125*corner4*corner4 + 0.125*corner5*corner5 + 0.125*corner6*corner6 + 0.125*corner7*corner7;
+    Kokkos::parallel_reduce("exterior corners", Kokkos::RangePolicy<>(0,1), KOKKOS_LAMBDA(const int i, k_wide_float_t& error) {
+        k_wide_float_t corner0 = static_cast<k_wide_float_t>(k_field(VOXEL(   1,    1,    1,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t corner1 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1,    1,    1,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t corner2 = static_cast<k_wide_float_t>(k_field(VOXEL(   1, ny+1,    1,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t corner3 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1, ny+1,    1,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t corner4 = static_cast<k_wide_float_t>(k_field(VOXEL(   1,    1, nz+1,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t corner5 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1,    1, nz+1,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t corner6 = static_cast<k_wide_float_t>(k_field(VOXEL(   1, ny+1, nz+1,nx,ny,nz), field_var::div_e_err));
+        k_wide_float_t corner7 = static_cast<k_wide_float_t>(k_field(VOXEL(nx+1, ny+1, nz+1,nx,ny,nz), field_var::div_e_err));
+        error += k_wide_float_t(0.125)*corner0*corner0 + k_wide_float_t(0.125)*corner1*corner1 + k_wide_float_t(0.125)*corner2*corner2 + k_wide_float_t(0.125)*corner3*corner3 +
+                k_wide_float_t(0.125)*corner4*corner4 + k_wide_float_t(0.125)*corner5*corner5 + k_wide_float_t(0.125)*corner6*corner6 + k_wide_float_t(0.125)*corner7*corner7;
     },temp_err);
 
     err += temp_err;

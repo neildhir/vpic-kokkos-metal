@@ -63,10 +63,10 @@ struct DefaultCompress {
         // Track (atomically) the id's we've tried to pull from when dealing with a
         // We use this to store a list of things we bailed out on moving. Typically because the mapping of pull_from->write_to got skipped.
 
-        Kokkos::View<size_t> clean_up_to_count = sp->clean_up_to_count;
-        Kokkos::View<size_t> clean_up_from_count = sp->clean_up_from_count;
+        Kokkos::View<k_atomic_count_t> clean_up_to_count = sp->clean_up_to_count;
+        Kokkos::View<k_atomic_count_t> clean_up_from_count = sp->clean_up_from_count;
 
-        Kokkos::View<size_t>::host_mirror_type clean_up_from_count_h = sp->clean_up_from_count_h;
+        Kokkos::View<k_atomic_count_t>::host_mirror_type clean_up_from_count_h = sp->clean_up_from_count_h;
 
         Kokkos::View<size_t*> clean_up_from = sp->clean_up_from;
         Kokkos::View<size_t*> clean_up_to = sp->clean_up_to;
@@ -181,7 +181,7 @@ struct DefaultCompress {
         Kokkos::deep_copy(clean_up_from_count_h, clean_up_from_count);
 
         Kokkos::parallel_for("compress clean up", Kokkos::RangePolicy <
-        Kokkos::DefaultExecutionSpace > (0, clean_up_from_count_h() ), KOKKOS_LAMBDA (size_t n)
+        Kokkos::DefaultExecutionSpace > (0, static_cast<size_t>(clean_up_from_count_h()) ), KOKKOS_LAMBDA (size_t n)
         {
             size_t write_to = clean_up_to(n);
             size_t pull_from = clean_up_from(n);

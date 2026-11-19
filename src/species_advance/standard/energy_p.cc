@@ -1,5 +1,9 @@
 #define IN_spa
 #define HAS_V4_PIPELINE
+#ifdef VPIC_ENABLE_METAL
+#include "../../metal/metal_push.h"
+#include <cmath>
+#endif
 #include "spa_private.h"
 
 #ifdef USE_LEGACY_PARTICLE_ARRAY
@@ -120,6 +124,27 @@ energy_p_pipeline_v4( energy_p_pipeline_args_t * args,
 #endif
 #endif // USE_LEGACY_PARTICLE_ARRAY
 
+// Kinetic energy of particle n after a half step of acceleration in E (in
+// units of c^2). Shared by energy_p_kernel and the Metal check's reference
+// (the Metal kernel in src/metal/particle_loops.metal repeats it).
+KOKKOS_INLINE_FUNCTION float
+k_energy_p_particle(const k_interpolator_t& k_interp, const k_particles_t& k_particles,
+                    const k_particles_i_t& k_particles_i, const size_t n,
+                    const float qdt_2mc, const float msp) {
+        float dx = k_particles(n, particle_var::dx);
+        float dy = k_particles(n, particle_var::dy);
+        float dz = k_particles(n, particle_var::dz);
+        int   i  = k_particles_i(n);
+        float v0 = k_particles(n, particle_var::ux) + qdt_2mc*( ( k_interp(i, interpolator_var::ex)    + dy*k_interp(i, interpolator_var::dexdy)    ) +
+                                                             dz*( k_interp(i, interpolator_var::dexdz) + dy*k_interp(i, interpolator_var::d2exdydz) ) );
+        float v1 = k_particles(n, particle_var::uy) + qdt_2mc*( ( k_interp(i, interpolator_var::ey)    + dz*k_interp(i, interpolator_var::deydz)    ) +
+                                                             dx*( k_interp(i, interpolator_var::deydx) + dz*k_interp(i, interpolator_var::d2eydzdx) ) );
+        float v2 = k_particles(n, particle_var::uz) + qdt_2mc*( ( k_interp(i, interpolator_var::ez)    + dx*k_interp(i, interpolator_var::dezdx)    ) +
+                                                             dy*( k_interp(i, interpolator_var::dezdy) + dx*k_interp(i, interpolator_var::d2ezdxdy) ) );
+        v0 = v0*v0 + v1*v1 + v2*v2;
+        return (msp * k_particles(n, particle_var::w)) * (v0 / (1 + sqrtf(1 + v0)));
+}
+
 double
 energy_p_kernel(const k_interpolator_t& k_interp, 
                 const k_particles_t& k_particles, 
@@ -131,7 +156,7 @@ energy_p_kernel(const k_interpolator_t& k_interp,
 //  const float msp     = args->msp;
 //  const float one     = 1;
 
-  double en = 0;
+  k_wide_float_t en = 0;
 
   // Determine which particles this pipeline processes
 
@@ -162,20 +187,9 @@ energy_p_kernel(const k_interpolator_t& k_interp,
     en += (double)v0;
   }
 */
-    Kokkos::parallel_reduce(np, KOKKOS_LAMBDA(const size_t n, double& update) {
-        float dx = k_particles(n, particle_var::dx);
-        float dy = k_particles(n, particle_var::dy);
-        float dz = k_particles(n, particle_var::dz);
-        int   i  = k_particles_i(n);
-        float v0 = k_particles(n, particle_var::ux) + qdt_2mc*( ( k_interp(i, interpolator_var::ex)    + dy*k_interp(i, interpolator_var::dexdy)    ) +
-                                                             dz*( k_interp(i, interpolator_var::dexdz) + dy*k_interp(i, interpolator_var::d2exdydz) ) );
-        float v1 = k_particles(n, particle_var::uy) + qdt_2mc*( ( k_interp(i, interpolator_var::ey)    + dz*k_interp(i, interpolator_var::deydz)    ) +
-                                                             dx*( k_interp(i, interpolator_var::deydx) + dz*k_interp(i, interpolator_var::d2eydzdx) ) );
-        float v2 = k_particles(n, particle_var::uz) + qdt_2mc*( ( k_interp(i, interpolator_var::ez)    + dx*k_interp(i, interpolator_var::dezdx)    ) +
-                                                             dy*( k_interp(i, interpolator_var::dezdy) + dx*k_interp(i, interpolator_var::d2ezdxdy) ) );
-        v0 = v0*v0 + v1*v1 + v2*v2;
-        v0 = (msp * k_particles(n, particle_var::w)) * (v0 / (1 + sqrtf(1 + v0)));
-        update += static_cast<double>(v0);
+    Kokkos::parallel_reduce(np, KOKKOS_LAMBDA(const size_t n, k_wide_float_t& update) {
+        update += static_cast<k_wide_float_t>(
+          k_energy_p_particle(k_interp, k_particles, k_particles_i, n, qdt_2mc, msp));
     }, en);
     return en;
 }
@@ -220,8 +234,45 @@ energy_p_kokkos(const species_t* RESTRICT sp,
 
     float qdt_2mc = (sp->q*sp->g->dt)/(2*sp->m*sp->g->cvac);
 
-    local = energy_p_kernel(ia->k_i_d, sp->k_p_d, sp->k_p_i_d, qdt_2mc, sp->m, sp->np);
-    Kokkos::fence();
+#ifdef VPIC_ENABLE_METAL
+    if( vpic_metal_particle_loops_enabled() ) {
+      if( sp->k_p_d.stride(0)!=1 || ia->k_i_d.stride(0)!=INTERPOLATOR_VAR_COUNT )
+        ERROR(( "Unexpected array layout for the Metal energy sum" ));
+      vpic_metal_energy_args a;
+      a.particles         = sp->k_p_d.data();
+      a.particle_stride   = sp->k_p_d.stride(1);
+      a.particle_capacity = sp->k_p_d.extent(0);
+      a.particles_i       = sp->k_p_i_d.data();
+      a.np                = sp->np;
+      a.interpolators     = ia->k_i_d.data();
+      a.nvoxels           = ia->k_i_d.extent(0);
+      a.qdt_2mc           = qdt_2mc;
+      a.msp               = sp->m;
+      Kokkos::fence();   // the GPU reads arrays Kokkos kernels may just have written
+      local = vpic_metal_energy_p( a );
+      // VPIC_METAL_PARTICLE_LOOPS_CHECK: compare the GPU and CPU sums with the
+      // same per-particle arithmetic summed in double on the host (the CPU
+      // kernel sums in float when built with VPIC_DISABLE_DEVICE_FP64). The
+      // terms are never negative, so a zero reference means every term is zero.
+      // Keeps the reference value.
+      if( vpic_metal_particle_loops_check_enabled() ) {
+        const double cpu = energy_p_kernel(ia->k_i_d, sp->k_p_d, sp->k_p_i_d, qdt_2mc, sp->m, sp->np);
+        Kokkos::fence();
+        double ref = 0;
+        for( size_t n=0; n<size_t(sp->np); n++ )
+          ref += double( k_energy_p_particle(ia->k_i_d, sp->k_p_d, sp->k_p_i_d, n, qdt_2mc, sp->m) );
+        auto rel = [ref](double x) { return ref!=0 ? std::fabs(x-ref)/ref : ( x==0 ? 0.0 : HUGE_VAL ); };
+        MESSAGE(( "Metal energy check (%s, %zu particles): relative error against a double sum: GPU %.3g, CPU %.3g",
+                  sp->name, size_t(sp->np), rel(local), rel(cpu) ));
+        if( rel(local)>1e-5 ) ERROR(( "Metal energy sum differs from the double-precision reference" ));
+        local = ref;
+      }
+    } else
+#endif
+    {
+      local = energy_p_kernel(ia->k_i_d, sp->k_p_d, sp->k_p_i_d, qdt_2mc, sp->m, sp->np);
+      Kokkos::fence();
+    }
 
     mp_allsum_d( &local, &global, 1 );
     return global*(static_cast<double>(sp->g->cvac) * static_cast<double>(sp->g->cvac));

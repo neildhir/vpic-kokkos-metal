@@ -32,9 +32,31 @@
 
 typedef int16_t material_id;
 
+// Integer type of the counters that device code updates with atomics: the
+// particle mover count and the particle compaction counters (the particle sort
+// uses the same switch for its bin counts). They are 64-bit by default. Some
+// GPUs, such as Apple GPUs through Metal, have no 64-bit atomics; building with
+// VPIC_ENABLE_32BIT_ATOMIC_COUNTERS makes them 32-bit, which limits the movers
+// per species and process to 2^32-1.
+#ifdef VPIC_ENABLE_32BIT_ATOMIC_COUNTERS
+using k_atomic_count_t = uint32_t;
+#else
+using k_atomic_count_t = size_t;
+#endif
+
+// Floating-point type for the device arithmetic that VPIC does wider than
+// float: the reductions behind the energy and divergence-error diagnostics, and
+// a few moment and boundary averages. Double by default. Some GPUs, such as
+// Apple GPUs, have no double precision at all; building with
+// VPIC_DISABLE_DEVICE_FP64 makes it float, so that device code uses no FP64.
+#ifdef VPIC_DISABLE_DEVICE_FP64
+using k_wide_float_t = float;
+#else
+using k_wide_float_t = double;
+#endif
+
 // TODO: we dont need the [1] here
-// TODO: this can likely be unsigned, but that tends to upset Kokkos
-using k_counter_t = Kokkos::View<size_t[1]>;
+using k_counter_t = Kokkos::View<k_atomic_count_t[1]>;
 
 using k_field_t = Kokkos::View<float *[FIELD_VAR_COUNT]>;
 // TODO: This scatter access is needed only for jfxyz, not all field vars.
@@ -246,6 +268,14 @@ void print_particles_d(
         k_particles_t particles,
         size_t np
         );
+
+// A host copy of a view (for validation code that compares two results)
+template <class View>
+auto k_host_clone(const View& v) {
+  auto c = Kokkos::create_mirror(Kokkos::HostSpace(), v);
+  Kokkos::deep_copy(c, v);
+  return c;
+}
 
 // The templating here is to defer the type until later in the head include chain
 template <class P>

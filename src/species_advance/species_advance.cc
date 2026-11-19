@@ -8,6 +8,9 @@
  *
  */
 
+#ifdef VPIC_ENABLE_METAL
+#include "../metal/metal_push.h"
+#endif
 #include "species_advance.h"
 #include "../boundary/boundary.h"
 
@@ -50,6 +53,9 @@ restore_species( void ) {
 
 void
 delete_species( species_t * sp ) {
+#ifdef VPIC_ENABLE_METAL
+  vpic_metal_forget_arrays();   // the GPU's wrappers of these arrays go stale
+#endif
   delete_pbd(sp->pb_diag);
   UNREGISTER_OBJECT( sp );
   FREE_ALIGNED( sp->partition );
@@ -226,7 +232,7 @@ void
 species_t::copy_to_device()
 {
 
-  k_nm_h(0) = nm;
+  k_nm_h(0) = static_cast<k_atomic_count_t>(nm);  // nm <= max_nm, which fits (checked at allocation)
 
 #ifdef USE_LEGACY_PARTICLE_ARRAY
   // Avoid capturing this

@@ -13,6 +13,7 @@
 #define _species_advance_h_
 
 #include <iostream>
+#include <limits>
 
 #include "../sf_interface/sf_interface.h"
 #include "Kokkos_DualView.hpp"
@@ -185,9 +186,9 @@ class species_t {
 
         // Static allocations for the compressor
         Kokkos::View<size_t*> unsafe_index;
-        Kokkos::View<size_t> clean_up_to_count;
-        Kokkos::View<size_t> clean_up_from_count;
-        Kokkos::View<size_t>::host_mirror_type clean_up_from_count_h;
+        Kokkos::View<k_atomic_count_t> clean_up_to_count;
+        Kokkos::View<k_atomic_count_t> clean_up_from_count;
+        Kokkos::View<k_atomic_count_t>::host_mirror_type clean_up_from_count_h;
         Kokkos::View<size_t*> clean_up_from;
         Kokkos::View<size_t*> clean_up_to;
 
@@ -203,6 +204,12 @@ class species_t {
         }
         void init_kokkos_particles(size_t n_particles, size_t n_pmovers)
         {
+            // The mover counter may be narrower than size_t (see k_atomic_count_t)
+            if constexpr( sizeof(k_atomic_count_t) < sizeof(size_t) ) {
+              if( n_pmovers > std::numeric_limits<k_atomic_count_t>::max() )
+                ERROR(( "%zu particle movers exceed the %zu-bit mover counter",
+                        n_pmovers, 8*sizeof(k_atomic_count_t) ));
+            }
             k_p_d = k_particles_t("k_particles", n_particles);
             k_p_i_d = k_particles_i_t("k_particles_i", n_particles);
             k_pc_d = k_particle_copy_t("k_particle_copy_for_movers", n_pmovers);
@@ -213,8 +220,8 @@ class species_t {
             k_pm_i_d = k_particle_i_movers_t("k_particle_movers_i", n_pmovers);
             k_nm_d = k_counter_t("k_nm"); // size 1 encoded in type
             unsafe_index = Kokkos::View<size_t*>("safe index", 2*n_pmovers);
-            clean_up_to_count = Kokkos::View<size_t>("clean up to count");
-            clean_up_from_count = Kokkos::View<size_t>("clean up from count");
+            clean_up_to_count = Kokkos::View<k_atomic_count_t>("clean up to count");
+            clean_up_from_count = Kokkos::View<k_atomic_count_t>("clean up from count");
             clean_up_from = Kokkos::View<size_t*>("clean up from", n_pmovers);
             clean_up_to = Kokkos::View<size_t*>("clean up to", n_pmovers);
 
@@ -500,7 +507,7 @@ move_p_kokkos(
     if(v0<v3) v3=v0, axis=0;
     if(v1<v3) v3=v1, axis=1;
     if(v2<v3) v3=v2, axis=2;
-    v3 *= 0.5;
+    v3 *= 0.5f;
 
     // Compute the midpoint and the normalized displacement of the streak
     s_dispx *= v3;
@@ -750,7 +757,7 @@ move_p_kokkos_host_serial(
     if(v0<v3) v3=v0, axis=0;
     if(v1<v3) v3=v1, axis=1;
     if(v2<v3) v3=v2, axis=2;
-    v3 *= 0.5;
+    v3 *= 0.5f;
 
     // Compute the midpoint and the normalized displacement of the streak
     s_dispx *= v3;

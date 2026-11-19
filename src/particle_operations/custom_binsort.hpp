@@ -3,13 +3,27 @@
 
 #include <Kokkos_Core.hpp>
 #include <algorithm>
+#include <cstdint>
 #include <iostream>
+#include <limits>
 
 template <class KeyViewType>
 struct CustomBinOp1D {
+#ifdef VPIC_DISABLE_DEVICE_FP64
+  // No double precision in device code: bin integer keys exactly when every
+  // key value can have its own bin, and otherwise scale in float.
+  using key_scalar = typename KeyViewType::non_const_value_type;
+  static_assert(std::is_integral_v<key_scalar>,
+                "VPIC_DISABLE_DEVICE_FP64 bins integer keys only");
+  size_t max_bins_ = {};
+  float mul_    = {};
+  key_scalar min_ = {};
+  bool one_bin_per_key_ = false;
+#else
   size_t max_bins_ = {};
   double mul_   = {};
   double min_   = {};
+#endif
 
 #ifdef KOKKOS_ENABLE_DEPRECATED_CODE_4
   KOKKOS_DEPRECATED CustomBinOp1D() = default;
@@ -32,13 +46,23 @@ struct CustomBinOp1D {
         (static_cast<double>(max) - static_cast<double>(min)) <=
             static_cast<double>(max_bins)) {
       mul_ = 1.;
+#ifdef VPIC_DISABLE_DEVICE_FP64
+      one_bin_per_key_ = true;
+#endif
     }
   }
 
   // Determine bin index from key value
   template <class ViewType>
   KOKKOS_INLINE_FUNCTION size_t bin(ViewType& keys, const size_t& i) const {
+#ifdef VPIC_DISABLE_DEVICE_FP64
+    if (one_bin_per_key_) return static_cast<size_t>(keys(i) - min_);
+    // Float rounding keeps the bins in key order but may overshoot the end
+    const size_t b = static_cast<size_t>(mul_ * static_cast<float>(keys(i) - min_));
+    return b < max_bins_ ? b : max_bins_ - 1;
+#else
     return static_cast<size_t>(mul_ * (static_cast<double>(keys(i)) - min_));
+#endif
   }
 
   // Return maximum bin index + 1
@@ -167,8 +191,16 @@ class CustomBinSort {
   using size_type  = size_t; //SizeType;
   using value_type = size_type;
 
+  // Bin counts are updated with atomics. Some GPUs, such as Apple GPUs through
+  // Metal, have no 64-bit atomics, so VPIC_ENABLE_32BIT_ATOMIC_COUNTERS makes
+  // them 32-bit. Offsets and the permutation always stay 64-bit.
+#ifdef VPIC_ENABLE_32BIT_ATOMIC_COUNTERS
+  using bin_count_scalar = uint32_t;
+#else
+  using bin_count_scalar = size_t;
+#endif
   using offset_type    = Kokkos::View<size_type*, Space>;
-  using bin_count_type = Kokkos::View<const size_t*, Space>;
+  using bin_count_type = Kokkos::View<const bin_count_scalar*, Space>;
 
   using const_key_view_type = typename KeyViewType::const_type;
 
@@ -187,7 +219,7 @@ class CustomBinSort {
   using const_key_scalar     = typename KeyViewType::const_value_type;
 
   using bin_count_atomic_type =
-      Kokkos::View<size_t*, Space, Kokkos::MemoryTraits<Kokkos::Atomic> >;
+      Kokkos::View<bin_count_scalar*, Space, Kokkos::MemoryTraits<Kokkos::Atomic> >;
 
  private:
   const_key_view_type keys;
@@ -236,7 +268,7 @@ class CustomBinSort {
     if (bin_op.max_bins() <= 0)
       Kokkos::abort(
           "The number of bins in the BinSortOp object must be greater than 0!");
-    bin_count_atomic = Kokkos::View<size_t*, Space>(
+    bin_count_atomic = Kokkos::View<bin_count_scalar*, Space>(
         "Kokkos::SortImpl::CustomBinSortFunctor::bin_count", bin_op.max_bins());
     bin_count_const = bin_count_atomic;
     bin_offsets =
@@ -312,6 +344,13 @@ class CustomBinSort {
         "CustomBinSort was initialized with!");
 
     const size_t len = range_end - range_begin;
+    // With 32-bit bin counts, a single bin could in principle overflow if more
+    // than 2^32-1 elements are sorted at once.
+    if constexpr (sizeof(bin_count_scalar) < sizeof(size_t)) {
+      if (len > std::numeric_limits<bin_count_scalar>::max())
+        Kokkos::abort("CustomBinSort: too many elements for 32-bit bin counts "
+                      "(VPIC_ENABLE_32BIT_ATOMIC_COUNTERS)");
+    }
     Kokkos::parallel_for(
         "Kokkos::Sort::BinCount",
         Kokkos::RangePolicy<ExecutionSpace, bin_count_tag>(exec, 0, len),

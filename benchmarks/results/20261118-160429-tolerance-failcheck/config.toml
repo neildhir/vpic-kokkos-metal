@@ -1,0 +1,110 @@
+# VPIC benchmark harness settings. vpic_bench.py loads this file; command-line
+# flags only select builds, a preset and a few recorded overrides.
+# Every result folder keeps a copy of the config it ran with.
+
+deck = "decks/harris_bench.deck"   # path relative to benchmarks/
+
+[run]
+repeats = 3            # measured runs per case and build (median and spread reported)
+warmup = 0             # discarded runs per case and build before the measured ones
+pause_s = 0.0          # sleep between runs [s]; raise it on fanless Macs
+wait_idle_s = 0.0      # before each run, wait up to this long [s] for other busy processes to finish
+timeout_s = 1800       # wall-clock limit of one run [s]
+mpirun = "mpirun"
+
+[run.env]              # environment of every run (VPIC ignores OMP_NUM_THREADS; threads come from --tpp)
+OMP_PROC_BIND = "spread"
+OMP_PLACES = "threads"
+
+[layouts]
+# A layout is "<MPI ranks>x<threads per rank>". "auto" expands to the largest
+# power of two <= the physical core count, 1 thread each (8x1 on a 10-core M4,
+# the fastest CPU layout measured there).
+cpu_default = ["auto"]
+# --sweep tries these on CPU builds and keeps the fastest per case. "auto"
+# expands to Nx(cores/N) for powers of two N <= cores, plus Nx1 when N is at
+# least half the cores (1x10, 2x5, 4x2, 8x1 on a 10-core M4).
+cpu_sweep = ["auto"]
+gpu_default = ["1x1"]
+# A build counts as a GPU build when a CMakeCache BOOL entry matching this
+# regular expression is ON.
+gpu_cmake_pattern = "^(Kokkos_ENABLE|ENABLE_KOKKOS|VPIC_ENABLE)_(CUDA|HIP|SYCL|OPENACC|OPENMPTARGET|METAL)$"
+
+[preflight]
+max_load_per_core = 0.5         # refuse if the 1-minute load average exceeds this times the physical cores
+max_process_cpu_percent = 80.0  # refuse if another process uses more than this %CPU (100 = one core)
+max_memory_fraction = 0.75      # refuse cases whose estimated memory exceeds this fraction of RAM
+bytes_per_particle = 96         # estimate: 32 B particle x 1.5 headroom x 2 (out-of-place sort)
+
+[physics]
+# Max over the energy dumps of |E_build - E_ref| / max|E_ref|, per column.
+# bulk = bz and the two kinetic energies; fluctuation = ex, ey, ez, bx, by.
+# See README.md ("Physics check") for why these values.
+tol_bulk = 1e-9
+tol_fluctuation = 1e-9
+
+# Cases: nx, ny, nz cells; nppc macro particles per cell (both species);
+# nstep a multiple of 40. ny and nppc*nx*ny*nz/2 must divide by the ranks.
+# Particles = nppc * nx * ny * nz. CPU times are 8x1 on a base M4 (16 GB).
+
+[cases.2d-smoke]       # 0.5M particles, well under a second per run
+nx = 128
+ny = 128
+nz = 1
+nppc = 32
+nstep = 40
+
+[cases.3d-smoke]       # 1M particles
+nx = 32
+ny = 32
+nz = 32
+nppc = 32
+nstep = 40
+
+[cases.2d-small]       # 26M particles, ~100 ms/step
+nx = 512
+ny = 512
+nz = 1
+nppc = 100
+nstep = 40
+
+[cases.3d-small]       # 17M particles, ~60 ms/step
+nx = 64
+ny = 64
+nz = 64
+nppc = 64
+nstep = 40
+
+[cases.2d-medium]      # 105M particles, ~480 ms/step, ~10 GB
+nx = 1024
+ny = 1024
+nz = 1
+nppc = 100
+nstep = 40
+
+[cases.3d-medium]      # 67M particles, ~390 ms/step, ~6.5 GB
+nx = 128
+ny = 128
+nz = 128
+nppc = 32
+nstep = 40
+
+[cases.2d-large]       # 210M particles, ~20 GB: Macs with 32 GB or more
+nx = 2048
+ny = 1024
+nz = 1
+nppc = 100
+nstep = 40
+
+[cases.3d-large]       # 268M particles, ~26 GB: Macs with 48 GB or more
+nx = 256
+ny = 128
+nz = 128
+nppc = 64
+nstep = 40
+
+[presets]
+smoke = ["2d-smoke", "3d-smoke"]
+small = ["2d-small", "3d-small"]
+medium = ["2d-medium", "3d-medium"]
+large = ["2d-large", "3d-large"]

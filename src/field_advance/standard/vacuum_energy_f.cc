@@ -100,7 +100,7 @@ vacuum_energy_f_pipeline( pipeline_args_t * args,
 #endif
 
 struct field_reduce {
-    typedef double value_type[];
+    typedef k_wide_float_t value_type[];
     typedef k_field_t::size_type size_type;
 
     k_field_t k_field;
@@ -120,12 +120,12 @@ struct field_reduce {
         const int fyz = VOXEL(x,   y+1, z+1, nx,ny,nz);
         const int fzx = VOXEL(x+1, y,   z+1, nx,ny,nz);
         const int fxy = VOXEL(x+1, y+1, z,   nx,ny,nz);
-        const float qepsx = 0.25*k_mat(0, material_coeff_var::epsx);
-        const float qepsy = 0.25*k_mat(0, material_coeff_var::epsy);
-        const float qepsz = 0.25*k_mat(0, material_coeff_var::epsz);
-        const float hrmux = 0.5*k_mat(0, material_coeff_var::rmux);
-        const float hrmuy = 0.5*k_mat(0, material_coeff_var::rmuy);
-        const float hrmuz = 0.5*k_mat(0, material_coeff_var::rmuz);
+        const float qepsx = 0.25f*k_mat(0, material_coeff_var::epsx);
+        const float qepsy = 0.25f*k_mat(0, material_coeff_var::epsy);
+        const float qepsz = 0.25f*k_mat(0, material_coeff_var::epsz);
+        const float hrmux = 0.5f*k_mat(0, material_coeff_var::rmux);
+        const float hrmuy = 0.5f*k_mat(0, material_coeff_var::rmuy);
+        const float hrmuz = 0.5f*k_mat(0, material_coeff_var::rmuz);
 
         en[0] += qepsx* ( k_field(f0,  field_var::ex) * k_field(f0,  field_var::ex) + 
                           k_field(fy,  field_var::ex) * k_field(fy,  field_var::ex) + 
@@ -206,7 +206,7 @@ vacuum_energy_f( double              *          global,
 void vacuum_energy_f_kokkos(double* global, const field_array_t* RESTRICT fa) {
     if( !fa ) ERROR(( "Bad args" ));
 
-    double en[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    k_wide_float_t en[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     const int nx = fa->g->nx, ny = fa->g->ny, nz = fa->g->nz;
     Kokkos::MDRangePolicy<Kokkos::Rank<3>> policy({1,1,1}, {nz+1,ny+1,nx+1});
     sfa_params_t* sfa = reinterpret_cast<sfa_params_t*>(fa->params);
@@ -215,10 +215,11 @@ void vacuum_energy_f_kokkos(double* global, const field_array_t* RESTRICT fa) {
     Kokkos::parallel_reduce("field energy reduction", policy, field_reducer, en);
 
     double v0 = 0.5*fa->g->eps0*fa->g->dV;
+    double en_scaled[6];
     for(int i=0; i<6; i++) {
-        en[i] *= v0;
+        en_scaled[i] = en[i]*v0;
     }
-    mp_allsum_d( en, global, 6 );
+    mp_allsum_d( en_scaled, global, 6 );
 }
 
 

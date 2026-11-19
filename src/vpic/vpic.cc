@@ -8,6 +8,9 @@
  *
  */
 
+#ifdef VPIC_ENABLE_METAL
+#include "../metal/metal_push.h"
+#endif
 #include "vpic.h"
 
 /* Note that, when a vpic_simulation is created (and thus registered
@@ -216,6 +219,9 @@ void checkpt_kokkos(vpic_simulation& simulation, const char* fbase)
  */
 void restore_kokkos(vpic_simulation& simulation, const char * fbase)
 {
+#ifdef VPIC_ENABLE_METAL
+  vpic_metal_forget_arrays();   // the GPU's wrappers of these arrays go stale
+#endif
     // The way the VPIC checkpoint/restore works is by copying raw bytes and
     // pointers.  It messes with the reference counting built into Kokkos, and
     // thus we have to manual handle a bunch of the data copies / fix the
@@ -264,12 +270,12 @@ void restore_kokkos(vpic_simulation& simulation, const char * fbase)
         new(&sp->k_pm_h) k_particle_movers_t::host_mirror_type();
         new(&sp->k_pm_i_h) k_particle_i_movers_t::host_mirror_type();
 
-        new(&sp->unsafe_index) Kokkos::View<int*>();
-        new(&sp->clean_up_to_count) Kokkos::View<int>();
-        new(&sp->clean_up_from_count) Kokkos::View<int>();
-        new(&sp->clean_up_from_count_h) Kokkos::View<int>::host_mirror_type();
-        new(&sp->clean_up_from) Kokkos::View<int*>();
-        new(&sp->clean_up_to) Kokkos::View<int*>();
+        new(&sp->unsafe_index) decltype(sp->unsafe_index)();
+        new(&sp->clean_up_to_count) decltype(sp->clean_up_to_count)();
+        new(&sp->clean_up_from_count) decltype(sp->clean_up_from_count)();
+        new(&sp->clean_up_from_count_h) decltype(sp->clean_up_from_count_h)();
+        new(&sp->clean_up_from) decltype(sp->clean_up_from)();
+        new(&sp->clean_up_to) decltype(sp->clean_up_to)();
 
         sp->init_kokkos_particles();
 

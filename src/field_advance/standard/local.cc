@@ -527,6 +527,23 @@ void reduce_jf(field_array_t* RESTRICT fa ) {
   auto& kad = fa->k_jf_accum_d;
   auto& kah = fa->k_jf_accum_h;
   auto& kfd = fa->k_f_d;
+  // Particles moved on the host (from other ranks, injectors, emitters) add
+  // current to the host accumulator. Often nothing does (one rank, no open
+  // boundaries), and adding zeros then rewrites every field record for
+  // nothing. Reading the accumulator once is much cheaper: skip the add and
+  // the clear if it is all zero. Field values are unchanged except for the
+  // sign of a zero: a -0 current stays -0 instead of becoming +0. When the
+  // accumulator does hold current (most multi-rank steps), the scan is extra:
+  // one host read of 3 floats per voxel, small next to the copy and add.
+  // Count voxels with current (a sum: its identity is 0, unlike Max's)
+  int accumulated = 0;
+  Kokkos::parallel_reduce("Find jf accumulation",
+    Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>(0, n_fields),
+    KOKKOS_LAMBDA (const int i, int& found) {
+      if( kah(i, accumulator_var::jx)!=0 || kah(i, accumulator_var::jy)!=0 ||
+          kah(i, accumulator_var::jz)!=0 ) found += 1;
+    }, Kokkos::Sum<int>(accumulated));
+  if( accumulated==0 ) return;
   // Move the current to the accumulator on device
   Kokkos::deep_copy(kad,kah);
   // Sum the accumulator into the field

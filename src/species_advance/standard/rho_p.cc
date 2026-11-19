@@ -15,6 +15,12 @@
 
 
 #include "../../vpic/kokkos_helpers.h"
+#ifdef VPIC_ENABLE_METAL
+#include "../../metal/metal_push.h"
+#include <algorithm>
+#include <cmath>
+#include <vector>
+#endif
 
 #ifdef USE_LEGACY_PARTICLE_ARRAY
 // accumulate_rho_p adds the charge density associated with the
@@ -448,11 +454,39 @@ struct accum_rhob {
     }
 };
 
-void
-k_accumulate_rho_p( /**/  field_array_t * RESTRICT fa,
-                  const species_t     * RESTRICT sp )
+// Charge of particle n deposited on the eight corners of its cell:
+// w[0..7] go to v, v+1, v+sy, v+sy+1, v+sz, v+sz+1, v+sz+sy, v+sz+sy+1.
+// Shared by the deposit and the Metal check's reference (the Metal kernel in
+// src/metal/particle_loops.metal repeats it).
+KOKKOS_INLINE_FUNCTION void
+k_rho_weights( const k_particles_t& kparticles, const size_t n, const float q_8V, float w[8] )
 {
-  if( !fa || !sp || fa->g!=sp->g ) ERROR(( "Bad args" ));
+    float w0, w1, w2, w3, w4, w5, w6, w7, dz;
+
+    w0 = kparticles(n, particle_var::dx);
+    w1 = kparticles(n, particle_var::dy);
+    dz = kparticles(n, particle_var::dz);
+    w7 = kparticles(n, particle_var::w) * q_8V;
+
+#   define FMA( x,y,z) ((z)+(x)*(y))
+#   define FNMS(x,y,z) ((z)-(x)*(y))
+    w6=FNMS(w0,w7,w7);                    // q(1-dx)
+    w7=FMA( w0,w7,w7);                    // q(1+dx)
+    w4=FNMS(w1,w6,w6); w5=FNMS(w1,w7,w7); // q(1-dx)(1-dy), q(1+dx)(1-dy)
+    w6=FMA( w1,w6,w6); w7=FMA( w1,w7,w7); // q(1-dx)(1+dy), q(1+dx)(1+dy)
+    w0=FNMS(dz,w4,w4); w1=FNMS(dz,w5,w5); w2=FNMS(dz,w6,w6); w3=FNMS(dz,w7,w7);
+    w4=FMA( dz,w4,w4); w5=FMA( dz,w5,w5); w6=FMA( dz,w6,w6); w7=FMA( dz,w7,w7);
+#   undef FNMS
+#   undef FMA
+
+    w[0] = w0; w[1] = w1; w[2] = w2; w[3] = w3;
+    w[4] = w4; w[5] = w5; w[6] = w6; w[7] = w7;
+}
+
+static void
+k_accumulate_rho_p_cpu( /**/  field_array_t * RESTRICT fa,
+                        const species_t     * RESTRICT sp )
+{
 
     k_field_t kfield = fa->k_f_d;
     k_particles_t kparticles = sp->k_p_d;
@@ -467,38 +501,106 @@ k_accumulate_rho_p( /**/  field_array_t * RESTRICT fa,
 
     Kokkos::parallel_for("accumulate_rho_p", Kokkos::RangePolicy<>(0, np), 
       KOKKOS_LAMBDA(const size_t n) {
-        float w0, w1, w2, w3, w4, w5, w6, w7, dz;
-
-        w0 = kparticles(n, particle_var::dx);
-        w1 = kparticles(n, particle_var::dy);
-        dz = kparticles(n, particle_var::dz);
+        float w[8];
+        k_rho_weights(kparticles, n, q_8V, w);
         int v = kparticles_i(n);
-        w7 = kparticles(n, particle_var::w) * q_8V;
-
-#   define FMA( x,y,z) ((z)+(x)*(y))
-#   define FNMS(x,y,z) ((z)-(x)*(y))
-        w6=FNMS(w0,w7,w7);                    // q(1-dx)
-        w7=FMA( w0,w7,w7);                    // q(1+dx)
-        w4=FNMS(w1,w6,w6); w5=FNMS(w1,w7,w7); // q(1-dx)(1-dy), q(1+dx)(1-dy)
-        w6=FMA( w1,w6,w6); w7=FMA( w1,w7,w7); // q(1-dx)(1+dy), q(1+dx)(1+dy)
-        w0=FNMS(dz,w4,w4); w1=FNMS(dz,w5,w5); w2=FNMS(dz,w6,w6); w3=FNMS(dz,w7,w7);
-        w4=FMA( dz,w4,w4); w5=FMA( dz,w5,w5); w6=FMA( dz,w6,w6); w7=FMA( dz,w7,w7);
-#   undef FNMS
-#   undef FMA
 
         auto scatter_view_access = scatter_view.access();
 
-        scatter_view_access(v,         field_var::rhof) += w0;
-        scatter_view_access(v+1,       field_var::rhof) += w1;
-        scatter_view_access(v+sy,      field_var::rhof) += w2;
-        scatter_view_access(v+sy+1,    field_var::rhof) += w3;
-        scatter_view_access(v+sz,      field_var::rhof) += w4;
-        scatter_view_access(v+sz+1,    field_var::rhof) += w5;
-        scatter_view_access(v+sz+sy,   field_var::rhof) += w6;
-        scatter_view_access(v+sz+sy+1, field_var::rhof) += w7;
+        scatter_view_access(v,         field_var::rhof) += w[0];
+        scatter_view_access(v+1,       field_var::rhof) += w[1];
+        scatter_view_access(v+sy,      field_var::rhof) += w[2];
+        scatter_view_access(v+sy+1,    field_var::rhof) += w[3];
+        scatter_view_access(v+sz,      field_var::rhof) += w[4];
+        scatter_view_access(v+sz+1,    field_var::rhof) += w[5];
+        scatter_view_access(v+sz+sy,   field_var::rhof) += w[6];
+        scatter_view_access(v+sz+sy+1, field_var::rhof) += w[7];
 
     });
     Kokkos::Experimental::contribute(kfield, scatter_view);
+}
+
+#ifdef VPIC_ENABLE_METAL
+static void
+k_accumulate_rho_p_metal( /**/  field_array_t * RESTRICT fa,
+                          const species_t     * RESTRICT sp )
+{
+  if( sp->k_p_d.stride(0)!=1 || fa->k_f_d.stride(0)!=FIELD_VAR_COUNT )
+    ERROR(( "Unexpected array layout for the Metal charge deposit" ));
+  vpic_metal_rho_args a;
+  a.particles         = sp->k_p_d.data();
+  a.particle_stride   = sp->k_p_d.stride(1);
+  a.particle_capacity = sp->k_p_d.extent(0);
+  a.particles_i       = sp->k_p_i_d.data();
+  a.np                = sp->np;
+  a.fields            = fa->k_f_d.data();
+  a.nvoxels           = fa->k_f_d.extent(0);
+  a.q_8V              = (sp->q)*(sp->g->r8V);
+  a.sy                = sp->g->sy;
+  a.sz                = sp->g->sz;
+  Kokkos::fence();   // the GPU reads and adds to arrays Kokkos kernels just wrote
+  vpic_metal_accumulate_rho_p( a );
+}
+
+// VPIC_METAL_PARTICLE_LOOPS_CHECK: run the GPU deposit and the CPU deposit
+// from the same rhof and compare both with a reference that computes each
+// particle's weights as the CPU loop does but sums them in double. Float sums
+// of many near-equal weights drift (a single-threaded float sum of 10^6
+// weights in one cell is about 3e-4 low), so the reference, not the CPU
+// result, decides. Keeps the CPU result.
+static void
+k_accumulate_rho_p_checked( /**/  field_array_t * RESTRICT fa,
+                            const species_t     * RESTRICT sp )
+{
+  k_field_t& f = fa->k_f_d;
+  const size_t nv = f.extent(0);
+  Kokkos::fence();
+  std::vector<float> before( nv ), gpu( nv );
+  std::vector<double> ref( nv, 0.0 );
+  for( size_t v=0; v<nv; v++ ) before[v] = f(v, field_var::rhof);
+
+  const float q_8V = (sp->q)*(sp->g->r8V);
+  const int sy = sp->g->sy, sz = sp->g->sz;
+  for( size_t n=0; n<size_t(sp->np); n++ ) {
+    float w[8];
+    k_rho_weights( sp->k_p_d, n, q_8V, w );
+    const int v = sp->k_p_i_d(n);
+    const int corner[8] = { v, v+1, v+sy, v+sy+1, v+sz, v+sz+1, v+sz+sy, v+sz+sy+1 };
+    for( int k=0; k<8; k++ ) ref[corner[k]] += double(w[k]);
+  }
+
+  k_accumulate_rho_p_metal( fa, sp );
+  for( size_t v=0; v<nv; v++ ) { gpu[v] = f(v, field_var::rhof); f(v, field_var::rhof) = before[v]; }
+  k_accumulate_rho_p_cpu( fa, sp );
+  Kokkos::fence();
+  double gpu_err = 0, cpu_err = 0, max_dep = 0;
+  for( size_t v=0; v<nv; v++ ) {
+    const double exact = double(before[v]) + ref[v];
+    gpu_err = std::max( gpu_err, std::fabs( double(gpu[v]) - exact ) );
+    cpu_err = std::max( cpu_err, std::fabs( double(f(v, field_var::rhof)) - exact ) );
+    max_dep = std::max( max_dep, std::fabs( ref[v] ) );
+  }
+  const double scale = max_dep>0 ? max_dep : 1;
+  MESSAGE(( "Metal charge deposit check (%s, %zu particles): largest error against a double sum, "
+            "relative to the largest deposit: GPU %.3g, CPU %.3g",
+            sp->name, size_t(sp->np), gpu_err/scale, cpu_err/scale ));
+  if( gpu_err/scale>1e-5 ) ERROR(( "Metal charge deposit differs from the double-precision reference" ));
+}
+#endif
+
+void
+k_accumulate_rho_p( /**/  field_array_t * RESTRICT fa,
+                  const species_t     * RESTRICT sp )
+{
+  if( !fa || !sp || fa->g!=sp->g ) ERROR(( "Bad args" ));
+#ifdef VPIC_ENABLE_METAL
+  if( vpic_metal_particle_loops_enabled() ) {
+    if( vpic_metal_particle_loops_check_enabled() ) k_accumulate_rho_p_checked( fa, sp );
+    else                                            k_accumulate_rho_p_metal( fa, sp );
+    return;
+  }
+#endif
+  k_accumulate_rho_p_cpu( fa, sp );
 }
 
 void 

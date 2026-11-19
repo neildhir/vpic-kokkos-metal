@@ -1,0 +1,53 @@
+build cpu: compiling harris_bench.deck
+build cpu: lpi_bench.deck already compiled from the same deck and build
+build metal: compiling harris_bench.deck
+build metal: lpi_bench.deck already compiled from the same deck and build
+2d-small     cpu            8x1   warmup0  steady    93.73 ms/step  wall    98.01 ms/step  push 0.375 /ns
+2d-small     metal          1x4   warmup0  steady    39.82 ms/step  wall    42.75 ms/step  push 0.971 /ns
+2d-small     cpu            8x1   measure0 steady    98.00 ms/step  wall    98.62 ms/step  push 0.360 /ns
+2d-small     metal          1x4   measure0 steady    39.69 ms/step  wall    41.41 ms/step  push 0.971 /ns
+2d-small     metal          1x4   measure1 steady    39.85 ms/step  wall    41.39 ms/step  push 0.968 /ns
+2d-small     cpu            8x1   measure1 steady    95.88 ms/step  wall    97.93 ms/step  push 0.368 /ns
+2d-small     cpu            8x1   measure2 steady    94.76 ms/step  wall    96.81 ms/step  push 0.362 /ns
+2d-small     metal          1x4   measure2 steady    39.76 ms/step  wall    41.31 ms/step  push 0.972 /ns
+3d-small     cpu            8x1   warmup0  steady    59.29 ms/step  wall    62.02 ms/step  push 0.381 /ns
+3d-small     metal          1x4   warmup0  steady    24.71 ms/step  wall    25.60 ms/step  push 0.867 /ns
+3d-small     cpu            8x1   measure0 steady    61.52 ms/step  wall    63.18 ms/step  push 0.376 /ns
+3d-small     metal          1x4   measure0 steady    24.88 ms/step  wall    25.70 ms/step  push 0.866 /ns
+3d-small     metal          1x4   measure1 steady    24.78 ms/step  wall    25.50 ms/step  push 0.871 /ns
+3d-small     cpu            8x1   measure1 steady    60.43 ms/step  wall    62.89 ms/step  push 0.370 /ns
+3d-small     cpu            8x1   measure2 steady    59.78 ms/step  wall    63.07 ms/step  push 0.365 /ns
+3d-small     metal          1x4   measure2 steady    24.78 ms/step  wall    25.55 ms/step  push 0.867 /ns
+lpi-sorted-24 cpu            8x1   warmup0  steady    27.28 ms/step  wall    29.10 ms/step  push 0.546 /ns
+lpi-sorted-24 metal          1x4   warmup0  steady    11.38 ms/step  wall    13.83 ms/step  push 1.303 /ns
+lpi-sorted-24 cpu            8x1   measure0 steady    28.08 ms/step  wall    30.85 ms/step  push 0.552 /ns
+lpi-sorted-24 metal          1x4   measure0 steady    11.27 ms/step  wall    13.65 ms/step  push 1.316 /ns
+lpi-sorted-24 metal          1x4   measure1 steady    11.46 ms/step  wall    13.80 ms/step  push 1.302 /ns
+lpi-sorted-24 cpu            8x1   measure1 steady    29.19 ms/step  wall    30.20 ms/step  push 0.555 /ns
+lpi-sorted-24 cpu            8x1   measure2 steady    28.03 ms/step  wall    30.29 ms/step  push 0.567 /ns
+lpi-sorted-24 metal          1x4   measure2 steady    11.28 ms/step  wall    13.73 ms/step  push 1.315 /ns
+lpi-sorted-44 cpu            8x1   warmup0  steady    31.44 ms/step  wall    33.06 ms/step  push 0.510 /ns
+lpi-sorted-44 metal          1x4   warmup0  steady    12.75 ms/step  wall    16.15 ms/step  push 1.190 /ns
+lpi-sorted-44 cpu            8x1   measure0 steady    31.34 ms/step  wall    32.81 ms/step  push 0.525 /ns
+lpi-sorted-44 metal          1x4   measure0 steady    12.62 ms/step  wall    16.07 ms/step  push 1.199 /ns
+lpi-sorted-44 metal          1x4   measure1 steady    12.59 ms/step  wall    16.09 ms/step  push 1.201 /ns
+lpi-sorted-44 cpu            8x1   measure1 steady    30.73 ms/step  wall    32.82 ms/step  push 0.483 /ns
+lpi-sorted-44 cpu            8x1   measure2 steady    32.81 ms/step  wall    33.51 ms/step  push 0.514 /ns
+lpi-sorted-44 metal          1x4   measure2 steady    12.56 ms/step  wall    15.86 ms/step  push 1.199 /ns
+lpi-sorted-64 cpu            8x1   warmup0  steady    38.12 ms/step  wall    39.87 ms/step  push 0.413 /ns
+lpi-sorted-64 metal          1x4   warmup0  steady    15.51 ms/step  wall    19.03 ms/step  push 1.080 /ns
+lpi-sorted-64 cpu            8x1   measure0 steady    37.33 ms/step  wall    39.60 ms/step  push 0.413 /ns
+lpi-sorted-64 metal          1x4   measure0 steady    15.35 ms/step  wall    19.01 ms/step  push 1.084 /ns  (busy: /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd)
+lpi-sorted-64 metal          1x4   measure1 steady    15.33 ms/step  wall    19.18 ms/step  push 1.085 /ns  (busy: /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd)
+lpi-sorted-64 cpu            8x1   measure1 steady    38.27 ms/step  wall    41.35 ms/step  push 0.399 /ns  (busy: /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd)
+lpi-sorted-64 cpu            8x1   measure2 steady    38.95 ms/step  wall    41.01 ms/step  push 0.430 /ns
+lpi-sorted-64 metal          1x4   measure2 steady    15.61 ms/step  wall    19.16 ms/step  push 1.075 /ns
+lpi-sorted-128 cpu            8x1   warmup0  steady    90.44 ms/step  wall    94.60 ms/step  push 0.212 /ns
+lpi-sorted-128 metal          1x4   warmup0  steady    43.21 ms/step  wall    48.78 ms/step  push 0.584 /ns
+lpi-sorted-128 cpu            8x1   measure0 steady    88.96 ms/step  wall    94.87 ms/step  push 0.203 /ns  (busy: /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd)
+lpi-sorted-128 metal          1x4   measure0 steady    43.37 ms/step  wall    48.50 ms/step  push 0.583 /ns
+lpi-sorted-128 metal          1x4   measure1 steady    42.38 ms/step  wall    48.44 ms/step  push 0.589 /ns
+lpi-sorted-128 cpu            8x1   measure1 steady    91.89 ms/step  wall    98.60 ms/step  push 0.213 /ns
+lpi-sorted-128 cpu            8x1   measure2 steady    90.03 ms/step  wall    95.05 ms/step  push 0.205 /ns
+lpi-sorted-128 metal          1x4   measure2 steady    42.66 ms/step  wall    48.38 ms/step  push 0.585 /ns
+results: benchmarks/results/20261118-194421-m4-post-opt-sorted-repeat

@@ -1,0 +1,5 @@
+# Compiled decks (rebuilt on demand by vpic_bench.py)
+work/
+# Runs that crashed or were interrupted
+results/*.incomplete/
+__pycache__/

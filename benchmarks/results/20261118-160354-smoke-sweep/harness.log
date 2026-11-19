@@ -1,0 +1,35 @@
+build cpu: deck already compiled from the same deck and build
+build applegpu: deck already compiled from the same deck and build
+2d-smoke   cpu            1x10  sweep0  steady    11.18 ms/step  wall    11.15 ms/step  push 13.23 ns/particle
+2d-smoke   cpu            2x5   sweep0  steady     8.44 ms/step  wall     8.64 ms/step  push 9.51 ns/particle
+2d-smoke   cpu            4x2   sweep0  steady     5.64 ms/step  wall     6.01 ms/step  push 5.34 ns/particle
+2d-smoke   cpu            8x1   sweep0  steady     3.92 ms/step  wall     4.12 ms/step  push 3.98 ns/particle
+2d-smoke cpu: fastest layout 8x1
+2d-smoke   applegpu       1x10  sweep0  steady    12.27 ms/step  wall    12.33 ms/step  push 14.55 ns/particle
+2d-smoke   applegpu       2x5   sweep0  steady    23.33 ms/step  wall    18.80 ms/step  push 15.79 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang, (clang))
+2d-smoke   applegpu       4x2   sweep0  steady     5.77 ms/step  wall     5.82 ms/step  push 5.89 ns/particle
+2d-smoke   applegpu       8x1   sweep0  steady     5.56 ms/step  wall     5.45 ms/step  push 4.40 ns/particle
+2d-smoke applegpu: fastest layout 8x1
+2d-smoke   cpu            8x1   warmup0 steady     4.01 ms/step  wall     4.62 ms/step  push 5.54 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+2d-smoke   applegpu       8x1   warmup0 steady     3.65 ms/step  wall     3.90 ms/step  push 3.72 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+2d-smoke   cpu            8x1   measure0 steady     4.47 ms/step  wall     4.84 ms/step  push 4.34 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+2d-smoke   applegpu       8x1   measure0 steady     3.94 ms/step  wall     4.30 ms/step  push 4.10 ns/particle
+2d-smoke   applegpu       8x1   measure1 steady     3.94 ms/step  wall     4.01 ms/step  push 3.53 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+2d-smoke   cpu            8x1   measure1 steady     4.07 ms/step  wall     4.35 ms/step  push 4.03 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+3d-smoke   cpu            1x10  sweep0  steady    11.34 ms/step  wall    12.30 ms/step  push 6.64 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+3d-smoke   cpu            2x5   sweep0  steady     8.42 ms/step  wall     8.94 ms/step  push 5.02 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+3d-smoke   cpu            4x2   sweep0  steady     7.48 ms/step  wall     7.72 ms/step  push 3.94 ns/particle
+3d-smoke   cpu            8x1   sweep0  steady     6.41 ms/step  wall     6.87 ms/step  push 3.02 ns/particle  (busy: /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores, /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+3d-smoke cpu: fastest layout 8x1
+3d-smoke   applegpu       1x10  sweep0  steady    10.56 ms/step  wall    10.78 ms/step  push 6.28 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+3d-smoke   applegpu       2x5   sweep0  steady     9.48 ms/step  wall     9.43 ms/step  push 5.71 ns/particle
+3d-smoke   applegpu       4x2   sweep0  steady     7.33 ms/step  wall     7.65 ms/step  push 3.88 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+3d-smoke   applegpu       8x1   sweep0  steady     6.47 ms/step  wall     6.43 ms/step  push 3.21 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang, /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores)
+3d-smoke applegpu: fastest layout 8x1
+3d-smoke   cpu            8x1   warmup0 steady     5.95 ms/step  wall     6.53 ms/step  push 3.00 ns/particle  (busy: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)
+3d-smoke   applegpu       8x1   warmup0 steady     7.13 ms/step  wall     7.22 ms/step  push 3.52 ns/particle  (busy: /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores)
+3d-smoke   cpu            8x1   measure0 steady     6.18 ms/step  wall     6.29 ms/step  push 3.05 ns/particle  (busy: /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores)
+3d-smoke   applegpu       8x1   measure0 steady     6.57 ms/step  wall     6.56 ms/step  push 3.46 ns/particle  (busy: /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores)
+3d-smoke   applegpu       8x1   measure1 steady    14.75 ms/step  wall    10.59 ms/step  push 3.56 ns/particle  (busy: ../exe_metal/harris_regress.deck.Darwin)
+3d-smoke   cpu            8x1   measure1 steady     6.30 ms/step  wall    10.89 ms/step  push 3.71 ns/particle
+results: benchmarks/results/20261118-160354-smoke-sweep
