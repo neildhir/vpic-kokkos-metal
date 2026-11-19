@@ -1,0 +1,19 @@
+build cpu: compiling harris_bench.deck
+build applegpu: compiling harris_bench.deck
+2d-smoke   cpu            8x1   warmup0 steady     3.42 ms/step  wall     3.57 ms/step  push 3.43 ns/particle
+2d-smoke   applegpu       8x1   warmup0 steady     3.47 ms/step  wall     3.65 ms/step  push 3.90 ns/particle
+2d-smoke   cpu            8x1   measure0 steady     3.53 ms/step  wall     3.66 ms/step  push 3.48 ns/particle
+2d-smoke   applegpu       8x1   measure0 steady     3.79 ms/step  wall     3.71 ms/step  push 4.25 ns/particle
+2d-smoke   applegpu       8x1   measure1 steady     3.69 ms/step  wall     3.72 ms/step  push 3.28 ns/particle
+2d-smoke   cpu            8x1   measure1 steady     3.50 ms/step  wall     3.60 ms/step  push 3.94 ns/particle
+2d-smoke   cpu            8x1   measure2 steady     3.65 ms/step  wall     3.74 ms/step  push 4.17 ns/particle
+2d-smoke   applegpu       8x1   measure2 steady     3.55 ms/step  wall     3.58 ms/step  push 2.88 ns/particle
+3d-smoke   cpu            8x1   warmup0 steady     6.16 ms/step  wall     6.26 ms/step  push 3.44 ns/particle
+3d-smoke   applegpu       8x1   warmup0 steady     5.77 ms/step  wall     6.02 ms/step  push 3.14 ns/particle
+3d-smoke   cpu            8x1   measure0 steady     8.83 ms/step  wall    10.43 ms/step  push 3.86 ns/particle
+3d-smoke   applegpu       8x1   measure0 steady     9.36 ms/step  wall     7.90 ms/step  push 3.71 ns/particle  (busy: harris_bench.deck.Darwin)
+3d-smoke   applegpu       8x1   measure1 steady     6.36 ms/step  wall     6.39 ms/step  push 2.68 ns/particle  (busy: harris_bench.deck.Darwin)
+3d-smoke   cpu            8x1   measure1 steady     6.22 ms/step  wall     8.67 ms/step  push 3.31 ns/particle  (busy: harris_bench.deck.Darwin)
+3d-smoke   cpu            8x1   measure2 steady    13.61 ms/step  wall    11.17 ms/step  push 3.91 ns/particle  (busy: harris_bench.deck.Darwin)
+3d-smoke   applegpu       8x1   measure2 steady    10.72 ms/step  wall    10.10 ms/step  push 3.50 ns/particle  (busy: harris_bench.deck.Darwin)
+results: benchmarks/results/20261118-160205-smoke

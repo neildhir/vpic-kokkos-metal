@@ -1,0 +1,2441 @@
+{
+ "schema": 1,
+ "id": "20261118-161858-lpi-smoke",
+ "created": "2026-11-18T16:18:58-08:00",
+ "argv": [
+  "vpic_bench.py",
+  "--build",
+  "cpu=../build/cpu-openmp",
+  "--build",
+  "metal=../build/metal",
+  "--cases",
+  "lpi-smoke-24,lpi-smoke-64,2d-smoke",
+  "--repeats",
+  "2",
+  "--tag",
+  "lpi-smoke"
+ ],
+ "machine": {
+  "model_name": "MacBook Pro",
+  "model_identifier": "Mac16,1",
+  "chip": "Apple M4",
+  "cpu_cores": 10,
+  "cpu_performance_cores": 4,
+  "cpu_efficiency_cores": 6,
+  "gpu_cores": 10,
+  "memory_gib": 16,
+  "macos": "27.2.1",
+  "macos_build": "26B131"
+ },
+ "machine_label": "MacBook Pro (Mac16,1) \u00b7 Apple M4 \u00b7 CPU 10 (4P+6E) \u00b7 GPU 10-core \u00b7 16 GiB \u00b7 macOS 27.2.1",
+ "conditions_start": {
+  "power_source": "Battery Power",
+  "low_power_mode": false,
+  "thermal_state": "nominal",
+  "load_average": [
+   2.94,
+   2.78,
+   3.7
+  ],
+  "busy_processes": []
+ },
+ "conditions_end": {
+  "power_source": "AC Power",
+  "low_power_mode": false,
+  "thermal_state": "nominal",
+  "load_average": [
+   16.22,
+   6.08,
+   4.85
+  ],
+  "busy_processes": [
+   {
+    "pid": 60037,
+    "cpu_percent": 97.0,
+    "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+   }
+  ]
+ },
+ "forced": false,
+ "warnings": [
+  "running on Battery Power"
+ ],
+ "repo": {
+  "commit": "8b383248bd08a91c445002ba808b39148b0c91b0",
+  "branch": "fix/apple-gpu-portability",
+  "dirty": true,
+  "mpirun_version": "mpirun (Open MPI) 5.0.11"
+ },
+ "decks": {
+  "lpi": {
+   "name": "lpi",
+   "path": "benchmarks/decks/lpi_bench.deck",
+   "args": [
+    "nx",
+    "ny",
+    "nz",
+    "total_particles",
+    "nstep",
+    "sort_interval"
+   ],
+   "decomposition": "xyz",
+   "nstep_multiple": 4,
+   "bulk_energy_columns": [
+    "electron",
+    "I2"
+   ],
+   "sha256": "5731ee4338e2dbf4811118120279fb9bdf51673e9cd4b778d7e0e18e3ad9826b"
+  },
+  "harris": {
+   "name": "harris",
+   "path": "benchmarks/decks/harris_bench.deck",
+   "args": [
+    "nx",
+    "ny",
+    "nz",
+    "nppc",
+    "nstep"
+   ],
+   "decomposition": "y",
+   "nstep_multiple": 40,
+   "bulk_energy_columns": [
+    "bz",
+    "electron",
+    "ion"
+   ],
+   "sha256": "93fccb8970d0b63a756049ca0ee74d97ed37277817b317048e2baf8d6aa118ac"
+  }
+ },
+ "settings": {
+  "reference": "cpu",
+  "repeats": 2,
+  "warmup": 1,
+  "pause_s": 0.0,
+  "wait_idle_s": 0.0,
+  "max_process_cpu_percent": 80.0,
+  "env": {
+   "OMP_PROC_BIND": "spread",
+   "OMP_PLACES": "threads"
+  },
+  "mpirun": "mpirun",
+  "physics": {
+   "tol_bulk": 0.001,
+   "tol_fluctuation": 0.01
+  }
+ },
+ "cases": {
+  "lpi-smoke-24": {
+   "name": "lpi-smoke-24",
+   "deck": "lpi",
+   "nx": 24,
+   "ny": 24,
+   "nz": 24,
+   "nstep": 20,
+   "nppc": null,
+   "total_particles": 1000000,
+   "sort_interval": 0,
+   "particles": 1000000,
+   "grid_points": 13824,
+   "deck_args": [
+    "24",
+    "24",
+    "24",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "bulk_energy_columns": [
+    "electron",
+    "I2"
+   ]
+  },
+  "lpi-smoke-64": {
+   "name": "lpi-smoke-64",
+   "deck": "lpi",
+   "nx": 64,
+   "ny": 64,
+   "nz": 64,
+   "nstep": 20,
+   "nppc": null,
+   "total_particles": 1000000,
+   "sort_interval": 0,
+   "particles": 1000000,
+   "grid_points": 262144,
+   "deck_args": [
+    "64",
+    "64",
+    "64",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "bulk_energy_columns": [
+    "electron",
+    "I2"
+   ]
+  },
+  "2d-smoke": {
+   "name": "2d-smoke",
+   "deck": "harris",
+   "nx": 128,
+   "ny": 128,
+   "nz": 1,
+   "nstep": 40,
+   "nppc": 32,
+   "total_particles": null,
+   "sort_interval": null,
+   "particles": 524288,
+   "grid_points": 16384,
+   "deck_args": [
+    "128",
+    "128",
+    "1",
+    "32",
+    "40"
+   ],
+   "bulk_energy_columns": [
+    "bz",
+    "electron",
+    "ion"
+   ]
+  }
+ },
+ "builds": {
+  "cpu": {
+   "path": "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/build/cpu-openmp",
+   "gpu": false,
+   "cmake": {
+    "BUILD_INTERNAL_KOKKOS": "ON",
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
+    "CMAKE_CXX_FLAGS": "",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "ENABLE_INTEGRATED_TESTS": "ON",
+    "ENABLE_KOKKOS_CUDA": "OFF",
+    "ENABLE_KOKKOS_OPENMP": "ON",
+    "ENABLE_OPENSSL": "OFF",
+    "ENABLE_UNIT_TESTS": "ON",
+    "Kokkos_ARCH_A64FX": "OFF",
+    "Kokkos_ARCH_AMDAVX": "OFF",
+    "Kokkos_ARCH_ARMV80": "OFF",
+    "Kokkos_ARCH_ARMV81": "OFF",
+    "Kokkos_ARCH_ARMV84": "OFF",
+    "Kokkos_ARCH_ARMV84_SVE": "OFF",
+    "Kokkos_ARCH_ARMV8_THUNDERX": "OFF",
+    "Kokkos_ARCH_ARMV8_THUNDERX2": "OFF",
+    "Kokkos_ARCH_ARMV9_GRACE": "OFF",
+    "Kokkos_ARCH_BDW": "OFF",
+    "Kokkos_ARCH_HSW": "OFF",
+    "Kokkos_ARCH_ICL": "OFF",
+    "Kokkos_ARCH_ICX": "OFF",
+    "Kokkos_ARCH_KNC": "OFF",
+    "Kokkos_ARCH_KNL": "OFF",
+    "Kokkos_ARCH_NATIVE": "ON",
+    "Kokkos_ARCH_POWER8": "OFF",
+    "Kokkos_ARCH_POWER9": "OFF",
+    "Kokkos_ARCH_RISCV_RVA22V": "OFF",
+    "Kokkos_ARCH_RISCV_SG2042": "OFF",
+    "Kokkos_ARCH_RISCV_U74MC": "OFF",
+    "Kokkos_ARCH_SKL": "OFF",
+    "Kokkos_ARCH_SKX": "OFF",
+    "Kokkos_ARCH_SNB": "OFF",
+    "Kokkos_ARCH_SPR": "OFF",
+    "Kokkos_ARCH_ZEN": "OFF",
+    "Kokkos_ARCH_ZEN2": "OFF",
+    "Kokkos_ARCH_ZEN3": "OFF",
+    "Kokkos_ARCH_ZEN4": "OFF",
+    "Kokkos_ARCH_ZEN5": "OFF",
+    "Kokkos_ENABLE_AGGRESSIVE_VECTORIZATION": "OFF",
+    "Kokkos_ENABLE_ATOMICS_BYPASS": "OFF",
+    "Kokkos_ENABLE_BENCHMARKS": "OFF",
+    "Kokkos_ENABLE_COMPILER_WARNINGS": "OFF",
+    "Kokkos_ENABLE_COMPILE_AS_CMAKE_LANGUAGE": "OFF",
+    "Kokkos_ENABLE_COMPLEX_ALIGN": "ON",
+    "Kokkos_ENABLE_CUDA": "OFF",
+    "Kokkos_ENABLE_CUDA_CONSTEXPR": "OFF",
+    "Kokkos_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE": "OFF",
+    "Kokkos_ENABLE_DEBUG": "OFF",
+    "Kokkos_ENABLE_DEBUG_BOUNDS_CHECK": "OFF",
+    "Kokkos_ENABLE_DEPRECATED_CODE_4": "OFF",
+    "Kokkos_ENABLE_DEPRECATED_CODE_5": "ON",
+    "Kokkos_ENABLE_DEPRECATION_WARNINGS": "ON",
+    "Kokkos_ENABLE_DESUL_ATOMICS_EXTERNAL": "OFF",
+    "Kokkos_ENABLE_EXAMPLES": "OFF",
+    "Kokkos_ENABLE_EXPERIMENTAL_CXX20_MODULES": "OFF",
+    "Kokkos_ENABLE_HEADER_SELF_CONTAINMENT_TESTS": "OFF",
+    "Kokkos_ENABLE_HIP": "OFF",
+    "Kokkos_ENABLE_HIP_MULTIPLE_KERNEL_INSTANTIATIONS": "OFF",
+    "Kokkos_ENABLE_HIP_RELOCATABLE_DEVICE_CODE": "OFF",
+    "Kokkos_ENABLE_HPX": "OFF",
+    "Kokkos_ENABLE_HWLOC": "OFF",
+    "Kokkos_ENABLE_IMPL_CHECK_POSSIBLY_BREAKING_LAYOUTS": "OFF",
+    "Kokkos_ENABLE_IMPL_CUDA_MALLOC_ASYNC": "OFF",
+    "Kokkos_ENABLE_IMPL_CUDA_UNIFIED_MEMORY": "OFF",
+    "Kokkos_ENABLE_IMPL_HIP_MALLOC_ASYNC": "OFF",
+    "Kokkos_ENABLE_IMPL_HPX_ASYNC_DISPATCH": "OFF",
+    "Kokkos_ENABLE_IMPL_MDSPAN": "ON",
+    "Kokkos_ENABLE_IMPL_REF_COUNT_BRANCH_UNLIKELY": "ON",
+    "Kokkos_ENABLE_IMPL_SYCL_OUT_OF_ORDER_QUEUES": "OFF",
+    "Kokkos_ENABLE_IMPL_VIEW_LEGACY": "OFF",
+    "Kokkos_ENABLE_IMPL_VIEW_OF_VIEWS_DESTRUCTOR_PRECONDITION_VIOLATION_WORKAROUND": "OFF",
+    "Kokkos_ENABLE_LARGE_MEM_TESTS": "OFF",
+    "Kokkos_ENABLE_LIBDL": "ON",
+    "Kokkos_ENABLE_LIBQUADMATH": "OFF",
+    "Kokkos_ENABLE_LIBRT": "OFF",
+    "Kokkos_ENABLE_MDSPAN_EXTERNAL": "OFF",
+    "Kokkos_ENABLE_MULTIPLE_CMAKE_LANGUAGES": "OFF",
+    "Kokkos_ENABLE_NEXTAPI": "OFF",
+    "Kokkos_ENABLE_NEXTSILICON": "OFF",
+    "Kokkos_ENABLE_ONEDPL": "OFF",
+    "Kokkos_ENABLE_OPENACC": "OFF",
+    "Kokkos_ENABLE_OPENACC_FORCE_HOST_AS_DEVICE": "OFF",
+    "Kokkos_ENABLE_OPENMP": "ON",
+    "Kokkos_ENABLE_ROCM": "OFF",
+    "Kokkos_ENABLE_ROCTHRUST": "OFF",
+    "Kokkos_ENABLE_SERIAL": "ON",
+    "Kokkos_ENABLE_SYCL": "OFF",
+    "Kokkos_ENABLE_SYCL_RELOCATABLE_DEVICE_CODE": "OFF",
+    "Kokkos_ENABLE_TESTS": "OFF",
+    "Kokkos_ENABLE_THREADS": "OFF",
+    "Kokkos_ENABLE_TUNING": "OFF",
+    "Kokkos_ENABLE_UNSUPPORTED_ARCHS": "OFF",
+    "USE_V4_ALTIVEC": "OFF",
+    "USE_V4_PORTABLE": "OFF",
+    "USE_V4_SSE": "OFF",
+    "VPIC_DISABLE_DEVICE_FP64": "OFF",
+    "VPIC_DUMP_ENERGIES": "OFF",
+    "VPIC_ENABLE_32BIT_ATOMIC_COUNTERS": "OFF",
+    "VPIC_ENABLE_ACCUMULATORS": "OFF",
+    "VPIC_ENABLE_AUTO_TUNING": "ON",
+    "VPIC_ENABLE_GPU_AWARE_MPI": "OFF",
+    "VPIC_ENABLE_HIERARCHICAL": "OFF",
+    "VPIC_ENABLE_TEAM_REDUCTION": "OFF",
+    "VPIC_ENABLE_VECTORIZATION": "OFF",
+    "VPIC_KOKKOS_DEBUG": "OFF",
+    "VPIC_USE_LEGACY_PARTICLE_ARRAY": "ON"
+   },
+   "git_state": "6d4434baa-CLEAN",
+   "libraries": {
+    "libvpic.a": "c3f95defa6da089cdbb88806e08949a4e3d384fb9ef9079f938d9ea84102e7a3"
+   },
+   "vpic_script_sha256": "80cf7d8b3a5d6afd777d679a94472445f62e9fbd7c816b9fe145dae6e061b6f4",
+   "exe_sha256": {
+    "lpi_bench": "f66f6afc202b50219801cdb207f963f42f6911a7ac115d1b43566998b26938cd",
+    "harris_bench": "4d7cfe3c2549e08803a4ebaa20e4b579ad6f22fa72265fe0a805f4b161ba41ea"
+   },
+   "layouts": [
+    "8x1"
+   ],
+   "vpic_git_hash": "7eb2947e12741df4931088a3ae6175adb21a6535",
+   "build_details": {
+    "VPIC Git Hash": "7eb2947e12741df4931088a3ae6175adb21a6535",
+    "Built on": "2026-11-18T15:37:59",
+    "ENABLE_INTEGRATED_TESTS": "OFF",
+    "ENABLE_UNIT_TESTS": "OFF",
+    "USE_V4_ALTIVEC": "OFF",
+    "USE_V4_PORTABLE": "OFF",
+    "USE_V4_SSE": "OFF",
+    "ENABLE_OPENSSL": "OFF",
+    "ENABLE_KOKKOS_OPENMP": "OFF",
+    "ENABLE_KOKKOS_CUDA": "OFF",
+    "BUILD_INTERNAL_KOKKOS": "OFF",
+    "VPIC_DUMP_ENERGIES": "OFF",
+    "VPIC_ENABLE_AUTO_TUNING": "ON",
+    "NOTE": "Auto tuning may have overwritten what CMake set these as.",
+    "VPIC_ENABLE_HIERARCHICAL": "ON",
+    "VPIC_ENABLE_TEAM_REDUCTION": "ON",
+    "VPIC_ENABLE_VECTORIZATION": "ON",
+    "VPIC_ENABLE_ACCUMULATOR": "OFF",
+    "Using sort method": "standard_sort"
+   }
+  },
+  "metal": {
+   "path": "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/build/metal",
+   "gpu": true,
+   "cmake": {
+    "BUILD_INTERNAL_KOKKOS": "ON",
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
+    "CMAKE_CXX_FLAGS": "",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "ENABLE_INTEGRATED_TESTS": "ON",
+    "ENABLE_KOKKOS_CUDA": "OFF",
+    "ENABLE_KOKKOS_OPENMP": "ON",
+    "ENABLE_OPENSSL": "OFF",
+    "ENABLE_UNIT_TESTS": "ON",
+    "Kokkos_ARCH_A64FX": "OFF",
+    "Kokkos_ARCH_AMDAVX": "OFF",
+    "Kokkos_ARCH_ARMV80": "OFF",
+    "Kokkos_ARCH_ARMV81": "OFF",
+    "Kokkos_ARCH_ARMV84": "OFF",
+    "Kokkos_ARCH_ARMV84_SVE": "OFF",
+    "Kokkos_ARCH_ARMV8_THUNDERX": "OFF",
+    "Kokkos_ARCH_ARMV8_THUNDERX2": "OFF",
+    "Kokkos_ARCH_ARMV9_GRACE": "OFF",
+    "Kokkos_ARCH_BDW": "OFF",
+    "Kokkos_ARCH_HSW": "OFF",
+    "Kokkos_ARCH_ICL": "OFF",
+    "Kokkos_ARCH_ICX": "OFF",
+    "Kokkos_ARCH_KNC": "OFF",
+    "Kokkos_ARCH_KNL": "OFF",
+    "Kokkos_ARCH_NATIVE": "ON",
+    "Kokkos_ARCH_POWER8": "OFF",
+    "Kokkos_ARCH_POWER9": "OFF",
+    "Kokkos_ARCH_RISCV_RVA22V": "OFF",
+    "Kokkos_ARCH_RISCV_SG2042": "OFF",
+    "Kokkos_ARCH_RISCV_U74MC": "OFF",
+    "Kokkos_ARCH_SKL": "OFF",
+    "Kokkos_ARCH_SKX": "OFF",
+    "Kokkos_ARCH_SNB": "OFF",
+    "Kokkos_ARCH_SPR": "OFF",
+    "Kokkos_ARCH_ZEN": "OFF",
+    "Kokkos_ARCH_ZEN2": "OFF",
+    "Kokkos_ARCH_ZEN3": "OFF",
+    "Kokkos_ARCH_ZEN4": "OFF",
+    "Kokkos_ARCH_ZEN5": "OFF",
+    "Kokkos_ENABLE_AGGRESSIVE_VECTORIZATION": "OFF",
+    "Kokkos_ENABLE_ATOMICS_BYPASS": "OFF",
+    "Kokkos_ENABLE_BENCHMARKS": "OFF",
+    "Kokkos_ENABLE_COMPILER_WARNINGS": "OFF",
+    "Kokkos_ENABLE_COMPILE_AS_CMAKE_LANGUAGE": "OFF",
+    "Kokkos_ENABLE_COMPLEX_ALIGN": "ON",
+    "Kokkos_ENABLE_CUDA": "OFF",
+    "Kokkos_ENABLE_CUDA_CONSTEXPR": "OFF",
+    "Kokkos_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE": "OFF",
+    "Kokkos_ENABLE_DEBUG": "OFF",
+    "Kokkos_ENABLE_DEBUG_BOUNDS_CHECK": "OFF",
+    "Kokkos_ENABLE_DEPRECATED_CODE_4": "OFF",
+    "Kokkos_ENABLE_DEPRECATED_CODE_5": "ON",
+    "Kokkos_ENABLE_DEPRECATION_WARNINGS": "ON",
+    "Kokkos_ENABLE_DESUL_ATOMICS_EXTERNAL": "OFF",
+    "Kokkos_ENABLE_EXAMPLES": "OFF",
+    "Kokkos_ENABLE_EXPERIMENTAL_CXX20_MODULES": "OFF",
+    "Kokkos_ENABLE_HEADER_SELF_CONTAINMENT_TESTS": "OFF",
+    "Kokkos_ENABLE_HIP": "OFF",
+    "Kokkos_ENABLE_HIP_MULTIPLE_KERNEL_INSTANTIATIONS": "OFF",
+    "Kokkos_ENABLE_HIP_RELOCATABLE_DEVICE_CODE": "OFF",
+    "Kokkos_ENABLE_HPX": "OFF",
+    "Kokkos_ENABLE_HWLOC": "OFF",
+    "Kokkos_ENABLE_IMPL_CHECK_POSSIBLY_BREAKING_LAYOUTS": "OFF",
+    "Kokkos_ENABLE_IMPL_CUDA_MALLOC_ASYNC": "OFF",
+    "Kokkos_ENABLE_IMPL_CUDA_UNIFIED_MEMORY": "OFF",
+    "Kokkos_ENABLE_IMPL_HIP_MALLOC_ASYNC": "OFF",
+    "Kokkos_ENABLE_IMPL_HPX_ASYNC_DISPATCH": "OFF",
+    "Kokkos_ENABLE_IMPL_MDSPAN": "ON",
+    "Kokkos_ENABLE_IMPL_REF_COUNT_BRANCH_UNLIKELY": "ON",
+    "Kokkos_ENABLE_IMPL_SYCL_OUT_OF_ORDER_QUEUES": "OFF",
+    "Kokkos_ENABLE_IMPL_VIEW_LEGACY": "OFF",
+    "Kokkos_ENABLE_IMPL_VIEW_OF_VIEWS_DESTRUCTOR_PRECONDITION_VIOLATION_WORKAROUND": "OFF",
+    "Kokkos_ENABLE_LARGE_MEM_TESTS": "OFF",
+    "Kokkos_ENABLE_LIBDL": "ON",
+    "Kokkos_ENABLE_LIBQUADMATH": "OFF",
+    "Kokkos_ENABLE_LIBRT": "OFF",
+    "Kokkos_ENABLE_MDSPAN_EXTERNAL": "OFF",
+    "Kokkos_ENABLE_MULTIPLE_CMAKE_LANGUAGES": "OFF",
+    "Kokkos_ENABLE_NEXTAPI": "OFF",
+    "Kokkos_ENABLE_NEXTSILICON": "OFF",
+    "Kokkos_ENABLE_ONEDPL": "OFF",
+    "Kokkos_ENABLE_OPENACC": "OFF",
+    "Kokkos_ENABLE_OPENACC_FORCE_HOST_AS_DEVICE": "OFF",
+    "Kokkos_ENABLE_OPENMP": "ON",
+    "Kokkos_ENABLE_ROCM": "OFF",
+    "Kokkos_ENABLE_ROCTHRUST": "OFF",
+    "Kokkos_ENABLE_SERIAL": "ON",
+    "Kokkos_ENABLE_SYCL": "OFF",
+    "Kokkos_ENABLE_SYCL_RELOCATABLE_DEVICE_CODE": "OFF",
+    "Kokkos_ENABLE_TESTS": "OFF",
+    "Kokkos_ENABLE_THREADS": "OFF",
+    "Kokkos_ENABLE_TUNING": "OFF",
+    "Kokkos_ENABLE_UNSUPPORTED_ARCHS": "OFF",
+    "USE_V4_ALTIVEC": "OFF",
+    "USE_V4_PORTABLE": "OFF",
+    "USE_V4_SSE": "OFF",
+    "VPIC_DISABLE_DEVICE_FP64": "OFF",
+    "VPIC_DUMP_ENERGIES": "OFF",
+    "VPIC_ENABLE_32BIT_ATOMIC_COUNTERS": "ON",
+    "VPIC_ENABLE_ACCUMULATORS": "OFF",
+    "VPIC_ENABLE_AUTO_TUNING": "ON",
+    "VPIC_ENABLE_GPU_AWARE_MPI": "OFF",
+    "VPIC_ENABLE_HIERARCHICAL": "OFF",
+    "VPIC_ENABLE_METAL": "ON",
+    "VPIC_ENABLE_TEAM_REDUCTION": "OFF",
+    "VPIC_ENABLE_VECTORIZATION": "OFF",
+    "VPIC_KOKKOS_DEBUG": "OFF",
+    "VPIC_USE_LEGACY_PARTICLE_ARRAY": "ON"
+   },
+   "git_state": "6d4434baa-CLEAN",
+   "libraries": {
+    "libvpic.a": "6e9014445cacb9c8fe8afa2869a24f953dc11729ca2ff718adce0f7bc22c77bd"
+   },
+   "vpic_script_sha256": "0ffb915361aa7ad57a8326ecd229679d9cf4445ce92654b36ad4418976faeda4",
+   "exe_sha256": {
+    "lpi_bench": "769cb670e8f8eaf87116fbb60cc48a590e93fdc05e2aa34410842f9bdd59d6a0",
+    "harris_bench": "2f1466faf5d6a5deb6bde8e08e5ee3c86a5566a0d652e3f92da358fe17297638"
+   },
+   "layouts": [
+    "1x4"
+   ],
+   "vpic_git_hash": "8b383248bd08a91c445002ba808b39148b0c91b0",
+   "build_details": {
+    "VPIC Git Hash": "8b383248bd08a91c445002ba808b39148b0c91b0",
+    "Built on": "2026-11-18T16:06:32",
+    "ENABLE_INTEGRATED_TESTS": "OFF",
+    "ENABLE_UNIT_TESTS": "OFF",
+    "USE_V4_ALTIVEC": "OFF",
+    "USE_V4_PORTABLE": "OFF",
+    "USE_V4_SSE": "OFF",
+    "ENABLE_OPENSSL": "OFF",
+    "ENABLE_KOKKOS_OPENMP": "OFF",
+    "ENABLE_KOKKOS_CUDA": "OFF",
+    "BUILD_INTERNAL_KOKKOS": "OFF",
+    "VPIC_DUMP_ENERGIES": "OFF",
+    "VPIC_ENABLE_AUTO_TUNING": "ON",
+    "NOTE": "Auto tuning may have overwritten what CMake set these as.",
+    "VPIC_ENABLE_HIERARCHICAL": "ON",
+    "VPIC_ENABLE_TEAM_REDUCTION": "ON",
+    "VPIC_ENABLE_VECTORIZATION": "ON",
+    "VPIC_ENABLE_ACCUMULATOR": "OFF",
+    "Using sort method": "standard_sort"
+   }
+  }
+ },
+ "runs": [
+  {
+   "case": "lpi-smoke-24",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "warmup",
+   "rep": 0,
+   "dir": "runs/lpi-smoke-24/cpu/warmup0-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/lpi_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "24",
+    "24",
+    "24",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 6.05,
+   "busy_before": [],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 82.1845,
+    "steady_ms_per_step": 71.33099659999999,
+    "push_ns_per_particle": 4.804,
+    "pushes_per_ns": 0.20815986677768525,
+    "sort_share": 3.108045738421661e-05,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 4.804,
+     "boundary_p": 43.709999999999994,
+     "clear_jf": 0.0045780000000000005,
+     "synchronize_jf": 17.61,
+     "advance_b": 0.0248,
+     "advance_e": 5.083,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.03893,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.004077,
+     "sort_particles": 0.002217,
+     "field_sa_contributions": 0.00021459999999999998,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.01585,
+     "JF_ACCUM_DATA_MOVEMENT": 0.01016,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.02317
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 2.099,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-24",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "warmup",
+   "rep": 0,
+   "dir": "runs/lpi-smoke-24/metal/warmup0-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/lpi_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "24",
+    "24",
+    "24",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 7.65,
+   "busy_before": [],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 16.223000000000003,
+    "steady_ms_per_step": 7.0235897000000005,
+    "push_ns_per_particle": 5.145,
+    "pushes_per_ns": 0.19436345966958213,
+    "sort_share": 0.00016629673000403196,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 5.1450000000000005,
+     "boundary_p": 0.0016209999999999998,
+     "clear_jf": 0.038650000000000004,
+     "synchronize_jf": 0.38930000000000003,
+     "advance_b": 0.2097,
+     "advance_e": 0.6993,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.1461,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.01938,
+     "sort_particles": 0.001168,
+     "field_sa_contributions": 0.0005007,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.1637,
+     "JF_ACCUM_DATA_MOVEMENT": 0.08397,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.1252
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.669,
+   "energy_diff": {
+    "ex": 1.453296782411699e-07,
+    "ey": 0.0,
+    "ez": 6.134852649896556e-07,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-24",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "measure",
+   "rep": 0,
+   "dir": "runs/lpi-smoke-24/cpu/measure0-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/lpi_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "24",
+    "24",
+    "24",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 7.65,
+   "busy_before": [
+    {
+     "pid": 59762,
+     "cpu_percent": 89.3,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 66.19500000000001,
+    "steady_ms_per_step": 78.8560765,
+    "push_ns_per_particle": 5.588,
+    "pushes_per_ns": 0.17895490336435219,
+    "sort_share": 1.3302716119790717e-05,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 5.588,
+     "boundary_p": 49.480000000000004,
+     "clear_jf": 0.005078,
+     "synchronize_jf": 12.330000000000002,
+     "advance_b": 0.02367,
+     "advance_e": 11.31,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.055909999999999994,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.004267999999999999,
+     "sort_particles": 0.001049,
+     "field_sa_contributions": 0.0003815,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.019,
+     "JF_ACCUM_DATA_MOVEMENT": 0.01261,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.02611
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 1.562,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-24",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "measure",
+   "rep": 0,
+   "dir": "runs/lpi-smoke-24/metal/measure0-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/lpi_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "24",
+    "24",
+    "24",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 7.65,
+   "busy_before": [],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 14.816750000000003,
+    "steady_ms_per_step": 8.2911482,
+    "push_ns_per_particle": 6.038,
+    "pushes_per_ns": 0.16561775422325273,
+    "sort_share": 0.00018115705614814604,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 6.038,
+     "boundary_p": 0.0015970000000000001,
+     "clear_jf": 0.040049999999999995,
+     "synchronize_jf": 0.4143,
+     "advance_b": 0.2668,
+     "advance_e": 0.9109,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.1722,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.02377,
+     "sort_particles": 0.001502,
+     "field_sa_contributions": 0.00042919999999999997,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.192,
+     "JF_ACCUM_DATA_MOVEMENT": 0.0895,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.14009999999999997
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.554,
+   "energy_diff": {
+    "ex": 1.453296782411699e-07,
+    "ey": 0.0,
+    "ez": 6.134852649896556e-07,
+    "bx": 0.0,
+    "by": 3.8689419138809986e-07,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-24",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "measure",
+   "rep": 1,
+   "dir": "runs/lpi-smoke-24/metal/measure1-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/lpi_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "24",
+    "24",
+    "24",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 7.65,
+   "busy_before": [
+    {
+     "pid": 59820,
+     "cpu_percent": 88.0,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59762,
+     "cpu_percent": 83.2,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59808,
+     "cpu_percent": 82.8,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 9.7397,
+    "steady_ms_per_step": 6.324237199999999,
+    "push_ns_per_particle": 4.630999999999999,
+    "pushes_per_ns": 0.21593608291945585,
+    "sort_share": 0.00015080079539078644,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 4.630999999999999,
+     "boundary_p": 0.001502,
+     "clear_jf": 0.030679999999999995,
+     "synchronize_jf": 0.3532,
+     "advance_b": 0.1779,
+     "advance_e": 0.6500999999999999,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.10410000000000001,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.01681,
+     "sort_particles": 0.0009537,
+     "field_sa_contributions": 0.0003815,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.16599999999999998,
+     "JF_ACCUM_DATA_MOVEMENT": 0.05950999999999999,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.1321
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.45,
+   "energy_diff": {
+    "ex": 1.453296782411699e-07,
+    "ey": 0.0,
+    "ez": 6.134852649896556e-07,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-24",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "measure",
+   "rep": 1,
+   "dir": "runs/lpi-smoke-24/cpu/measure1-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/lpi_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "24",
+    "24",
+    "24",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 7.65,
+   "busy_before": [
+    {
+     "pid": 59820,
+     "cpu_percent": 95.2,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59808,
+     "cpu_percent": 91.0,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59816,
+     "cpu_percent": 91.0,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59826,
+     "cpu_percent": 90.8,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59825,
+     "cpu_percent": 90.7,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59762,
+     "cpu_percent": 81.4,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 90.0995,
+    "steady_ms_per_step": 70.79055637,
+    "push_ns_per_particle": 5.299,
+    "pushes_per_ns": 0.1887148518588413,
+    "sort_share": 8.419202087986075e-06,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 5.299,
+     "boundary_p": 46.03,
+     "clear_jf": 0.0051979999999999995,
+     "synchronize_jf": 13.780000000000001,
+     "advance_b": 0.025060000000000006,
+     "advance_e": 5.5520000000000005,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.03624,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.004697,
+     "sort_particles": 0.000596,
+     "field_sa_contributions": 9.537e-05,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.016569999999999998,
+     "JF_ACCUM_DATA_MOVEMENT": 0.01497,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.026130000000000004
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 2.072,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-64",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "warmup",
+   "rep": 0,
+   "dir": "runs/lpi-smoke-64/cpu/warmup0-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/lpi_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "64",
+    "64",
+    "64",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 10.4,
+   "busy_before": [],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 132.477,
+    "steady_ms_per_step": 126.90986799999999,
+    "push_ns_per_particle": 14.069999999999999,
+    "pushes_per_ns": 0.07107320540156362,
+    "sort_share": 1.4088738946604216e-05,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 14.069999999999999,
+     "boundary_p": 68.27,
+     "clear_jf": 0.5661,
+     "synchronize_jf": 27.47,
+     "advance_b": 1.65,
+     "advance_e": 13.77,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.8844,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.018760000000000002,
+     "sort_particles": 0.001788,
+     "field_sa_contributions": 0.0,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.0216,
+     "JF_ACCUM_DATA_MOVEMENT": 0.127,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.060219999999999996
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 3.076,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-64",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "warmup",
+   "rep": 0,
+   "dir": "runs/lpi-smoke-64/metal/warmup0-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/lpi_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "64",
+    "64",
+    "64",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 10.4,
+   "busy_before": [],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 35.90835,
+    "steady_ms_per_step": 25.912327100000002,
+    "push_ns_per_particle": 12.690000000000001,
+    "pushes_per_ns": 0.07880220646178092,
+    "sort_share": 9.018873492068568e-05,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 12.690000000000001,
+     "boundary_p": 0.0015739999999999997,
+     "clear_jf": 0.8432000000000001,
+     "synchronize_jf": 0.7358,
+     "advance_b": 3.2,
+     "advance_e": 3.6439999999999997,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 3.15,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.07603,
+     "sort_particles": 0.002337,
+     "field_sa_contributions": 0.00028609999999999996,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.3549,
+     "JF_ACCUM_DATA_MOVEMENT": 1.091,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.1232
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 1.095,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-64",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "measure",
+   "rep": 0,
+   "dir": "runs/lpi-smoke-64/cpu/measure0-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/lpi_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "64",
+    "64",
+    "64",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 12.77,
+   "busy_before": [
+    {
+     "pid": 59959,
+     "cpu_percent": 90.4,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60037,
+     "cpu_percent": 89.7,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59960,
+     "cpu_percent": 88.8,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59762,
+     "cpu_percent": 88.3,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60012,
+     "cpu_percent": 88.2,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59969,
+     "cpu_percent": 85.3,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60015,
+     "cpu_percent": 85.2,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 111.674,
+    "steady_ms_per_step": 102.986952,
+    "push_ns_per_particle": 11.9,
+    "pushes_per_ns": 0.08403361344537816,
+    "sort_share": 1.4584371814402275e-05,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 11.9,
+     "boundary_p": 56.32000000000001,
+     "clear_jf": 0.09439,
+     "synchronize_jf": 20.54,
+     "advance_b": 1.036,
+     "advance_e": 12.059999999999999,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.8147,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.01769,
+     "sort_particles": 0.001502,
+     "field_sa_contributions": 0.0,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.01895,
+     "JF_ACCUM_DATA_MOVEMENT": 0.1564,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.027320000000000004
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 2.629,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-64",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "measure",
+   "rep": 0,
+   "dir": "runs/lpi-smoke-64/metal/measure0-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/lpi_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "64",
+    "64",
+    "64",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 12.77,
+   "busy_before": [],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 32.94925,
+    "steady_ms_per_step": 24.4368303,
+    "push_ns_per_particle": 13.170000000000002,
+    "pushes_per_ns": 0.0759301442672741,
+    "sort_share": 0.00012878102279901662,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 13.170000000000002,
+     "boundary_p": 0.002098,
+     "clear_jf": 0.993,
+     "synchronize_jf": 1.157,
+     "advance_b": 2.247,
+     "advance_e": 2.8729999999999998,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 2.173,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.05178000000000001,
+     "sort_particles": 0.0031470000000000005,
+     "field_sa_contributions": 0.00040530000000000004,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.4659,
+     "JF_ACCUM_DATA_MOVEMENT": 1.0070000000000001,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.2935
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.948,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-64",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "measure",
+   "rep": 1,
+   "dir": "runs/lpi-smoke-64/metal/measure1-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/lpi_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "64",
+    "64",
+    "64",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 12.77,
+   "busy_before": [
+    {
+     "pid": 59959,
+     "cpu_percent": 93.0,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59960,
+     "cpu_percent": 91.6,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60037,
+     "cpu_percent": 91.3,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60012,
+     "cpu_percent": 91.2,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60015,
+     "cpu_percent": 91.2,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59969,
+     "cpu_percent": 90.3,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 29.439100000000003,
+    "steady_ms_per_step": 22.5204023,
+    "push_ns_per_particle": 12.35,
+    "pushes_per_ns": 0.08097165991902834,
+    "sort_share": 0.00011220936315156325,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 12.35,
+     "boundary_p": 0.0017399999999999998,
+     "clear_jf": 0.6011,
+     "synchronize_jf": 0.6909,
+     "advance_b": 2.492,
+     "advance_e": 2.768,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 2.0949999999999998,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.05902999999999999,
+     "sort_particles": 0.002527,
+     "field_sa_contributions": 0.00040530000000000004,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.194,
+     "JF_ACCUM_DATA_MOVEMENT": 1.119,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.1467
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.883,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "lpi-smoke-64",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "measure",
+   "rep": 1,
+   "dir": "runs/lpi-smoke-64/cpu/measure1-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/lpi_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "64",
+    "64",
+    "64",
+    "1000000",
+    "20",
+    "0"
+   ],
+   "load_before": 12.77,
+   "busy_before": [
+    {
+     "pid": 60012,
+     "cpu_percent": 96.8,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60015,
+     "cpu_percent": 96.4,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59969,
+     "cpu_percent": 96.0,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60037,
+     "cpu_percent": 95.9,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59959,
+     "cpu_percent": 95.8,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 59960,
+     "cpu_percent": 95.1,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 82.961,
+    "steady_ms_per_step": 62.535577,
+    "push_ns_per_particle": 13.64,
+    "pushes_per_ns": 0.07331378299120235,
+    "sort_share": 3.5451819689774345e-05,
+    "steady_steps": 10,
+    "phases_ms_per_step": {
+     "advance_p": 13.64,
+     "boundary_p": 30.790000000000003,
+     "clear_jf": 0.7113,
+     "synchronize_jf": 8.143,
+     "advance_b": 0.9353,
+     "advance_e": 7.2459999999999996,
+     "clear_rhof": 0.0,
+     "accumulate_rho_p": 0.0,
+     "synchronize_rho": 0.0,
+     "compute_div_e_err": 0.0,
+     "compute_rms_div_e_err": 0.0,
+     "clean_div_e": 0.0,
+     "compute_div_b_err": 0.0,
+     "compute_rms_div_b_err": 0.0,
+     "clean_div_b": 0.0,
+     "synchronize_tang_e_norm_b": 0.0,
+     "load_interpolator": 0.7974,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "user_field_injection": 0.022010000000000002,
+     "sort_particles": 0.002217,
+     "field_sa_contributions": 0.0,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.03445,
+     "JF_ACCUM_DATA_MOVEMENT": 0.1954,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.0185
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 2.029,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "I2": 0.0,
+    "electron": 0.0
+   }
+  },
+  {
+   "case": "2d-smoke",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "warmup",
+   "rep": 0,
+   "dir": "runs/2d-smoke/cpu/warmup0-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/harris_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "128",
+    "128",
+    "1",
+    "32",
+    "40"
+   ],
+   "load_before": 15.11,
+   "busy_before": [],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 32.10625,
+    "steady_ms_per_step": 31.34424635,
+    "push_ns_per_particle": 7.7362060546875,
+    "pushes_per_ns": 0.12926232741617358,
+    "sort_share": 0.0027261781650717532,
+    "steady_steps": 20,
+    "phases_ms_per_step": {
+     "advance_p": 4.056,
+     "boundary_p": 20.435,
+     "clear_jf": 0.009785,
+     "synchronize_jf": 1.9144999999999999,
+     "advance_b": 0.025045,
+     "advance_e": 1.9294999999999998,
+     "clear_rhof": 0.000298,
+     "accumulate_rho_p": 0.022850000000000002,
+     "synchronize_rho": 0.5115,
+     "compute_div_e_err": 0.014545000000000002,
+     "compute_rms_div_e_err": 1.164,
+     "clean_div_e": 0.0023005,
+     "compute_div_b_err": 0.0005125,
+     "compute_rms_div_b_err": 0.8335000000000001,
+     "clean_div_b": 0.2011,
+     "synchronize_tang_e_norm_b": 0.024305,
+     "load_interpolator": 0.04004,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "sort_particles": 0.08545,
+     "field_sa_contributions": 9.534999999999999e-05,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.017044999999999998,
+     "JF_ACCUM_DATA_MOVEMENT": 0.028154999999999996,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.028720000000000002
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 1.781,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "electron": 0.0,
+    "ion": 0.0
+   }
+  },
+  {
+   "case": "2d-smoke",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "warmup",
+   "rep": 0,
+   "dir": "runs/2d-smoke/metal/warmup0-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/harris_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "128",
+    "128",
+    "1",
+    "32",
+    "40"
+   ],
+   "load_before": 15.11,
+   "busy_before": [],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 8.327,
+    "steady_ms_per_step": 7.952357685000001,
+    "push_ns_per_particle": 7.551193237304688,
+    "pushes_per_ns": 0.1324294013639808,
+    "sort_share": 0.047797145834744974,
+    "steady_steps": 20,
+    "phases_ms_per_step": {
+     "advance_p": 3.9590000000000005,
+     "boundary_p": 0.0023604999999999998,
+     "clear_jf": 0.09195,
+     "synchronize_jf": 0.7725000000000001,
+     "advance_b": 0.2641,
+     "advance_e": 1.351,
+     "clear_rhof": 0.0040055,
+     "accumulate_rho_p": 0.2092,
+     "synchronize_rho": 0.024245,
+     "compute_div_e_err": 0.05715,
+     "compute_rms_div_e_err": 0.01695,
+     "clean_div_e": 0.027205,
+     "compute_div_b_err": 0.00535,
+     "compute_rms_div_b_err": 0.002444,
+     "clean_div_b": 0.061950000000000005,
+     "synchronize_tang_e_norm_b": 0.0412,
+     "load_interpolator": 0.13465,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "sort_particles": 0.3801,
+     "field_sa_contributions": 4.7685e-05,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.22044999999999998,
+     "JF_ACCUM_DATA_MOVEMENT": 0.1585,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.168
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.729,
+   "energy_diff": {
+    "ex": 5.104615261324398e-06,
+    "ey": 1.4516312827523705e-05,
+    "ez": 3.514481420673098e-06,
+    "bx": 1.7487072681537675e-05,
+    "by": 3.4964056948696926e-06,
+    "bz": 0.0,
+    "electron": 0.0,
+    "ion": 0.0
+   }
+  },
+  {
+   "case": "2d-smoke",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "measure",
+   "rep": 0,
+   "dir": "runs/2d-smoke/cpu/measure0-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/harris_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "128",
+    "128",
+    "1",
+    "32",
+    "40"
+   ],
+   "load_before": 15.11,
+   "busy_before": [
+    {
+     "pid": 60037,
+     "cpu_percent": 96.2,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60015,
+     "cpu_percent": 94.7,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60012,
+     "cpu_percent": 94.6,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 7.6262750000000015,
+    "steady_ms_per_step": 7.630777185,
+    "push_ns_per_particle": 5.97381591796875,
+    "pushes_per_ns": 0.167397190293742,
+    "sort_share": 0.0035369922808196896,
+    "steady_steps": 20,
+    "phases_ms_per_step": {
+     "advance_p": 3.132,
+     "boundary_p": 3.7600000000000002,
+     "clear_jf": 0.010655000000000001,
+     "synchronize_jf": 0.17795,
+     "advance_b": 0.026104999999999996,
+     "advance_e": 0.207,
+     "clear_rhof": 0.00025035,
+     "accumulate_rho_p": 0.02041,
+     "synchronize_rho": 0.05525,
+     "compute_div_e_err": 0.00856,
+     "compute_rms_div_e_err": 0.003898,
+     "clean_div_e": 0.0008585000000000001,
+     "compute_div_b_err": 0.00035765,
+     "compute_rms_div_b_err": 0.005294999999999999,
+     "clean_div_b": 0.05215000000000001,
+     "synchronize_tang_e_norm_b": 0.023105,
+     "load_interpolator": 0.0506,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "sort_particles": 0.026990000000000004,
+     "field_sa_contributions": 4.7685e-05,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.014605000000000002,
+     "JF_ACCUM_DATA_MOVEMENT": 0.02862,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.02607
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.496,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "electron": 0.0,
+    "ion": 0.0
+   }
+  },
+  {
+   "case": "2d-smoke",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "measure",
+   "rep": 0,
+   "dir": "runs/2d-smoke/metal/measure0-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/harris_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "128",
+    "128",
+    "1",
+    "32",
+    "40"
+   ],
+   "load_before": 16.22,
+   "busy_before": [
+    {
+     "pid": 60015,
+     "cpu_percent": 88.5,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 60037,
+     "cpu_percent": 86.8,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 7.0473,
+    "steady_ms_per_step": 5.994395185,
+    "push_ns_per_particle": 7.123947143554688,
+    "pushes_per_ns": 0.14037161981258367,
+    "sort_share": 0.029435830397291366,
+    "steady_steps": 20,
+    "phases_ms_per_step": {
+     "advance_p": 3.7350000000000003,
+     "boundary_p": 0.0006435000000000001,
+     "clear_jf": 0.04114,
+     "synchronize_jf": 0.41035000000000005,
+     "advance_b": 0.16745000000000002,
+     "advance_e": 0.7625,
+     "clear_rhof": 0.0018955,
+     "accumulate_rho_p": 0.11195000000000002,
+     "synchronize_rho": 0.010405,
+     "compute_div_e_err": 0.02495,
+     "compute_rms_div_e_err": 0.005255,
+     "clean_div_e": 0.015390000000000001,
+     "compute_div_b_err": 0.0029920000000000003,
+     "compute_rms_div_b_err": 0.0031115000000000006,
+     "clean_div_b": 0.043355,
+     "synchronize_tang_e_norm_b": 0.03531,
+     "load_interpolator": 0.0799,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "sort_particles": 0.17645,
+     "field_sa_contributions": 4.7685e-05,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.14085,
+     "JF_ACCUM_DATA_MOVEMENT": 0.09275000000000001,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.13269999999999998
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.395,
+   "energy_diff": {
+    "ex": 1.2761538153665199e-06,
+    "ey": 1.0403357526412134e-05,
+    "ez": 3.8073548724466616e-06,
+    "bx": 7.34457052625553e-06,
+    "by": 9.535651895800932e-07,
+    "bz": 0.0,
+    "electron": 0.0,
+    "ion": 0.0
+   }
+  },
+  {
+   "case": "2d-smoke",
+   "build": "metal",
+   "layout": "1x4",
+   "phase": "measure",
+   "rep": 1,
+   "dir": "runs/2d-smoke/metal/measure1-1x4",
+   "command": [
+    "mpirun",
+    "-np",
+    "1",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/metal/harris_bench.deck.Darwin",
+    "--tpp",
+    "4",
+    "128",
+    "128",
+    "1",
+    "32",
+    "40"
+   ],
+   "load_before": 16.22,
+   "busy_before": [
+    {
+     "pid": 60037,
+     "cpu_percent": 97.2,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 6.788475,
+    "steady_ms_per_step": 6.0289945000000005,
+    "push_ns_per_particle": 6.761550903320313,
+    "pushes_per_ns": 0.1478950634696756,
+    "sort_share": 0.030328440339429732,
+    "steady_steps": 20,
+    "phases_ms_per_step": {
+     "advance_p": 3.5450000000000004,
+     "boundary_p": 0.000894,
+     "clear_jf": 0.03748,
+     "synchronize_jf": 0.4601,
+     "advance_b": 0.1708,
+     "advance_e": 0.8554999999999999,
+     "clear_rhof": 0.0025989999999999997,
+     "accumulate_rho_p": 0.11329999999999998,
+     "synchronize_rho": 0.0172,
+     "compute_div_e_err": 0.041995,
+     "compute_rms_div_e_err": 0.012445,
+     "clean_div_e": 0.021555,
+     "compute_div_b_err": 0.003052,
+     "compute_rms_div_b_err": 0.0013945,
+     "clean_div_b": 0.045790000000000004,
+     "synchronize_tang_e_norm_b": 0.034190000000000005,
+     "load_interpolator": 0.0794,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "sort_particles": 0.18285,
+     "field_sa_contributions": 0.0,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.16795,
+     "JF_ACCUM_DATA_MOVEMENT": 0.08895,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.14655
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.4,
+   "energy_diff": {
+    "ex": 5.87030755054431e-06,
+    "ey": 1.3790497186127375e-05,
+    "ez": 3.8073548724466616e-06,
+    "bx": 8.044053433512184e-06,
+    "by": 9.535651894698151e-07,
+    "bz": 0.0,
+    "electron": 3.7613753405640015e-07,
+    "ion": 0.0
+   }
+  },
+  {
+   "case": "2d-smoke",
+   "build": "cpu",
+   "layout": "8x1",
+   "phase": "measure",
+   "rep": 1,
+   "dir": "runs/2d-smoke/cpu/measure1-8x1",
+   "command": [
+    "mpirun",
+    "-np",
+    "8",
+    "/Users/neildhir/Projects/VPIC-METAL/vpic-kokkos-metal/benchmarks/work/cpu/harris_bench.deck.Darwin",
+    "--tpp",
+    "1",
+    "128",
+    "128",
+    "1",
+    "32",
+    "40"
+   ],
+   "load_before": 16.22,
+   "busy_before": [
+    {
+     "pid": 60037,
+     "cpu_percent": 98.4,
+     "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -cc1 -triple arm64-apple-macosx27.2.0 -O3 -Wundef-prefix=TARGET_OS_"
+    },
+    {
+     "pid": 33811,
+     "cpu_percent": 86.0,
+     "command": "/usr/libexec/mobileassetd"
+    }
+   ],
+   "error": null,
+   "metrics": {
+    "wall_ms_per_step": 4.01985,
+    "steady_ms_per_step": 4.0814245,
+    "push_ns_per_particle": 3.7450790405273433,
+    "pushes_per_ns": 0.26701706137000253,
+    "sort_share": 0.015129521567776152,
+    "steady_steps": 20,
+    "phases_ms_per_step": {
+     "advance_p": 1.9634999999999998,
+     "boundary_p": 1.5105,
+     "clear_jf": 0.00962,
+     "synchronize_jf": 0.1569,
+     "advance_b": 0.022365,
+     "advance_e": 0.1316,
+     "clear_rhof": 0.000298,
+     "accumulate_rho_p": 0.0206,
+     "synchronize_rho": 0.025999999999999995,
+     "compute_div_e_err": 0.0636,
+     "compute_rms_div_e_err": 0.0051400000000000005,
+     "clean_div_e": 0.0009419999999999999,
+     "compute_div_b_err": 0.000298,
+     "compute_rms_div_b_err": 0.0025989999999999997,
+     "clean_div_b": 0.0030875,
+     "synchronize_tang_e_norm_b": 0.0066500000000000005,
+     "load_interpolator": 0.03196,
+     "compute_curl_b": 0.0,
+     "compute_rhob": 0.0,
+     "uncenter_p": 0.0,
+     "user_initialization": 0.0,
+     "sort_particles": 0.06174999999999999,
+     "field_sa_contributions": 0.0,
+     "FIELD_DATA_MOVEMENT": 0.0,
+     "PARTICLE_DATA_MOVEMENT": 0.012504999999999999,
+     "JF_ACCUM_DATA_MOVEMENT": 0.027765,
+     "INTERPOLATOR_DATA_MOVEMENT": 0.0,
+     "BACKFILL": 0.023745
+    }
+   },
+   "returncode": 0,
+   "elapsed_s": 0.298,
+   "energy_diff": {
+    "ex": 0.0,
+    "ey": 0.0,
+    "ez": 0.0,
+    "bx": 0.0,
+    "by": 0.0,
+    "bz": 0.0,
+    "electron": 0.0,
+    "ion": 0.0
+   }
+  }
+ ],
+ "summary": {
+  "lpi-smoke-24": {
+   "cpu": {
+    "layout": "8x1",
+    "failed_runs": 0,
+    "busy_runs": 2,
+    "stats": {
+     "wall_ms_per_step": {
+      "median": 78.14725000000001,
+      "min": 66.19500000000001,
+      "max": 90.0995,
+      "spread": 0.30589048239061506,
+      "n": 2
+     },
+     "steady_ms_per_step": {
+      "median": 74.82331643500001,
+      "min": 70.79055637,
+      "max": 78.8560765,
+      "spread": 0.107794207932585,
+      "n": 2
+     },
+     "push_ns_per_particle": {
+      "median": 5.4435,
+      "min": 5.299,
+      "max": 5.588,
+      "spread": 0.05309084228896844,
+      "n": 2
+     },
+     "sort_share": {
+      "median": 1.0860959103888396e-05,
+      "min": 8.419202087986075e-06,
+      "max": 1.3302716119790717e-05,
+      "spread": 0.44963929843509554,
+      "n": 2
+     },
+     "pushes_per_ns": {
+      "median": 0.18383487761159673,
+      "min": 0.17895490336435219,
+      "max": 0.1887148518588413,
+      "spread": 0.053090842288968494,
+      "n": 2
+     }
+    },
+    "physics": {
+     "compared": 3,
+     "worst": {
+      "ex": 0.0,
+      "ey": 0.0,
+      "ez": 0.0,
+      "bx": 0.0,
+      "by": 0.0,
+      "bz": 0.0,
+      "I2": 0.0,
+      "electron": 0.0
+     },
+     "failing": [],
+     "problems": [],
+     "passed": true
+    },
+    "speedup": {
+     "wall_ms_per_step": 1.0,
+     "steady_ms_per_step": 1.0,
+     "push_ns_per_particle": 1.0
+    }
+   },
+   "metal": {
+    "layout": "1x4",
+    "failed_runs": 0,
+    "busy_runs": 1,
+    "stats": {
+     "wall_ms_per_step": {
+      "median": 12.278225,
+      "min": 9.7397,
+      "max": 14.816750000000003,
+      "spread": 0.4135003227258014,
+      "n": 2
+     },
+     "steady_ms_per_step": {
+      "median": 7.3076927,
+      "min": 6.324237199999999,
+      "max": 8.2911482,
+      "spread": 0.26915622765582375,
+      "n": 2
+     },
+     "push_ns_per_particle": {
+      "median": 5.3345,
+      "min": 4.630999999999999,
+      "max": 6.038,
+      "spread": 0.2637548036367046,
+      "n": 2
+     },
+     "sort_share": {
+      "median": 0.00016597892576946624,
+      "min": 0.00015080079539078644,
+      "max": 0.00018115705614814604,
+      "spread": 0.18289225946384566,
+      "n": 2
+     },
+     "pushes_per_ns": {
+      "median": 0.1907769185713543,
+      "min": 0.16561775422325273,
+      "max": 0.21593608291945585,
+      "spread": 0.2637548036367045,
+      "n": 2
+     }
+    },
+    "physics": {
+     "compared": 3,
+     "worst": {
+      "ex": 1.453296782411699e-07,
+      "ey": 0.0,
+      "ez": 6.134852649896556e-07,
+      "bx": 0.0,
+      "by": 3.8689419138809986e-07,
+      "bz": 0.0,
+      "I2": 0.0,
+      "electron": 0.0
+     },
+     "failing": [],
+     "problems": [],
+     "passed": true
+    },
+    "speedup": {
+     "wall_ms_per_step": 6.364702552689823,
+     "steady_ms_per_step": 10.238979594065308,
+     "push_ns_per_particle": 1.0204330302746274
+    }
+   }
+  },
+  "lpi-smoke-64": {
+   "cpu": {
+    "layout": "8x1",
+    "failed_runs": 0,
+    "busy_runs": 2,
+    "stats": {
+     "wall_ms_per_step": {
+      "median": 97.3175,
+      "min": 82.961,
+      "max": 111.674,
+      "spread": 0.29504457060652,
+      "n": 2
+     },
+     "steady_ms_per_step": {
+      "median": 82.76126450000001,
+      "min": 62.535577,
+      "max": 102.986952,
+      "spread": 0.4887718335913052,
+      "n": 2
+     },
+     "push_ns_per_particle": {
+      "median": 12.77,
+      "min": 11.9,
+      "max": 13.64,
+      "spread": 0.13625685199686768,
+      "n": 2
+     },
+     "sort_share": {
+      "median": 2.501809575208831e-05,
+      "min": 1.4584371814402275e-05,
+      "max": 3.5451819689774345e-05,
+      "spread": 0.8340941725602847,
+      "n": 2
+     },
+     "pushes_per_ns": {
+      "median": 0.07867369821829026,
+      "min": 0.07331378299120235,
+      "max": 0.08403361344537816,
+      "spread": 0.13625685199686766,
+      "n": 2
+     }
+    },
+    "physics": {
+     "compared": 3,
+     "worst": {
+      "ex": 0.0,
+      "ey": 0.0,
+      "ez": 0.0,
+      "bx": 0.0,
+      "by": 0.0,
+      "bz": 0.0,
+      "I2": 0.0,
+      "electron": 0.0
+     },
+     "failing": [],
+     "problems": [],
+     "passed": true
+    },
+    "speedup": {
+     "wall_ms_per_step": 1.0,
+     "steady_ms_per_step": 1.0,
+     "push_ns_per_particle": 1.0
+    }
+   },
+   "metal": {
+    "layout": "1x4",
+    "failed_runs": 0,
+    "busy_runs": 1,
+    "stats": {
+     "wall_ms_per_step": {
+      "median": 31.194175,
+      "min": 29.439100000000003,
+      "max": 32.94925,
+      "spread": 0.1125258161179129,
+      "n": 2
+     },
+     "steady_ms_per_step": {
+      "median": 23.4786163,
+      "min": 22.5204023,
+      "max": 24.4368303,
+      "spread": 0.08162440134941001,
+      "n": 2
+     },
+     "push_ns_per_particle": {
+      "median": 12.760000000000002,
+      "min": 12.35,
+      "max": 13.170000000000002,
+      "spread": 0.0642633228840127,
+      "n": 2
+     },
+     "sort_share": {
+      "median": 0.00012049519297528994,
+      "min": 0.00011220936315156325,
+      "max": 0.00012878102279901662,
+      "spread": 0.13752963282818875,
+      "n": 2
+     },
+     "pushes_per_ns": {
+      "median": 0.07845090209315123,
+      "min": 0.0759301442672741,
+      "max": 0.08097165991902834,
+      "spread": 0.0642633228840127,
+      "n": 2
+     }
+    },
+    "physics": {
+     "compared": 3,
+     "worst": {
+      "ex": 0.0,
+      "ey": 0.0,
+      "ez": 0.0,
+      "bx": 0.0,
+      "by": 0.0,
+      "bz": 0.0,
+      "I2": 0.0,
+      "electron": 0.0
+     },
+     "failing": [],
+     "problems": [],
+     "passed": true
+    },
+    "speedup": {
+     "wall_ms_per_step": 3.119733091194109,
+     "steady_ms_per_step": 3.524963457918941,
+     "push_ns_per_particle": 1.0007836990595609
+    }
+   }
+  },
+  "2d-smoke": {
+   "cpu": {
+    "layout": "8x1",
+    "failed_runs": 0,
+    "busy_runs": 2,
+    "stats": {
+     "wall_ms_per_step": {
+      "median": 5.823062500000001,
+      "min": 4.01985,
+      "max": 7.6262750000000015,
+      "spread": 0.619334757269049,
+      "n": 2
+     },
+     "steady_ms_per_step": {
+      "median": 5.8561008425,
+      "min": 4.0814245,
+      "max": 7.630777185,
+      "spread": 0.6060948710515653,
+      "n": 2
+     },
+     "push_ns_per_particle": {
+      "median": 4.859447479248047,
+      "min": 3.7450790405273433,
+      "max": 5.97381591796875,
+      "spread": 0.45863997644980875,
+      "n": 2
+     },
+     "sort_share": {
+      "median": 0.009333256924297921,
+      "min": 0.0035369922808196896,
+      "max": 0.015129521567776152,
+      "spread": 1.2420668777237687,
+      "n": 2
+     },
+     "pushes_per_ns": {
+      "median": 0.21720712583187227,
+      "min": 0.167397190293742,
+      "max": 0.26701706137000253,
+      "spread": 0.4586399764498087,
+      "n": 2
+     }
+    },
+    "physics": {
+     "compared": 3,
+     "worst": {
+      "ex": 0.0,
+      "ey": 0.0,
+      "ez": 0.0,
+      "bx": 0.0,
+      "by": 0.0,
+      "bz": 0.0,
+      "electron": 0.0,
+      "ion": 0.0
+     },
+     "failing": [],
+     "problems": [],
+     "passed": true
+    },
+    "speedup": {
+     "wall_ms_per_step": 1.0,
+     "steady_ms_per_step": 1.0,
+     "push_ns_per_particle": 1.0
+    }
+   },
+   "metal": {
+    "layout": "1x4",
+    "failed_runs": 0,
+    "busy_runs": 2,
+    "stats": {
+     "wall_ms_per_step": {
+      "median": 6.9178875,
+      "min": 6.788475,
+      "max": 7.0473,
+      "spread": 0.03741387815283204,
+      "n": 2
+     },
+     "steady_ms_per_step": {
+      "median": 6.011694842500001,
+      "min": 5.994395185,
+      "max": 6.0289945000000005,
+      "spread": 0.005755334544827297,
+      "n": 2
+     },
+     "push_ns_per_particle": {
+      "median": 6.942749023437501,
+      "min": 6.761550903320313,
+      "max": 7.123947143554688,
+      "spread": 0.05219780219780219,
+      "n": 2
+     },
+     "sort_share": {
+      "median": 0.029882135368360548,
+      "min": 0.029435830397291366,
+      "max": 0.030328440339429732,
+      "spread": 0.029871022640619894,
+      "n": 2
+     },
+     "pushes_per_ns": {
+      "median": 0.14413334164112962,
+      "min": 0.14037161981258367,
+      "max": 0.1478950634696756,
+      "spread": 0.05219780219780217,
+      "n": 2
+     }
+    },
+    "physics": {
+     "compared": 3,
+     "worst": {
+      "ex": 5.87030755054431e-06,
+      "ey": 1.4516312827523705e-05,
+      "ez": 3.8073548724466616e-06,
+      "bx": 1.7487072681537675e-05,
+      "by": 3.4964056948696926e-06,
+      "bz": 0.0,
+      "electron": 3.7613753405640015e-07,
+      "ion": 0.0
+     },
+     "failing": [],
+     "problems": [],
+     "passed": true
+    },
+    "speedup": {
+     "wall_ms_per_step": 0.8417399820393149,
+     "steady_ms_per_step": 0.9741181140965406,
+     "push_ns_per_particle": 0.6999313186813186
+    }
+   }
+  }
+ }
+}

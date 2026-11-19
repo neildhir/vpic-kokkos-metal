@@ -1,0 +1,6 @@
+build cpu: deck already compiled from the same deck and build
+build applegpu: deck already compiled from the same deck and build
+2d-smoke   cpu            8x1   measure0 steady     3.50 ms/step  wall     3.61 ms/step  push 3.82 ns/particle
+2d-smoke   applegpu       8x1   measure0 steady     3.40 ms/step  wall     3.47 ms/step  push 4.06 ns/particle
+results: benchmarks/results/20261118-160429-tolerance-failcheck
+PHYSICS CHECK FAILED or runs failed: see summary.md; speed-ups of failing builds are meaningless
