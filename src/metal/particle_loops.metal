@@ -24,16 +24,10 @@ struct EnergyParams {
   float msp;      // species mass
 };
 
-// Particle variables and field / interpolator layouts (kokkos_helpers.h)
-constant ulong LP_DX = 0, LP_DY = 1, LP_DZ = 2, LP_UX = 3, LP_UY = 4, LP_UZ = 5, LP_W = 6;
-constant ulong LP_FIELD_VARS = 16, LP_RHOF = 15;
-constant ulong LP_INTERP_VARS = 18;
-constant ulong LI_EX = 0, LI_DEXDY = 1, LI_DEXDZ = 2, LI_D2EXDYDZ = 3;
-constant ulong LI_EY = 4, LI_DEYDZ = 5, LI_DEYDX = 6, LI_D2EYDZDX = 7;
-constant ulong LI_EZ = 8, LI_DEZDX = 9, LI_DEZDY = 10, LI_D2EZDXDY = 11;
+// Array layouts (FIELD_VARS, RHOF, EX, PDX, ...) are in layout.metal
 
 inline void add_rho(device atomic_float* f, int voxel, float value) {
-  atomic_fetch_add_explicit(&f[ulong(voxel) * LP_FIELD_VARS + LP_RHOF], value, memory_order_relaxed);
+  atomic_fetch_add_explicit(&f[ulong(voxel) * FIELD_VARS + RHOF], value, memory_order_relaxed);
 }
 
 // The eight corners of a particle's cell, as offsets from its voxel
@@ -41,11 +35,13 @@ inline int rho_corner(ushort k, int sy, int sz) {
   return ((k & 1) ? 1 : 0) + ((k & 2) ? sy : 0) + ((k & 4) ? sz : 0);
 }
 
-// Trilinear charge deposit into rhof, as k_accumulate_rho_p. Particles are
-// sorted by cell between sorts, so (as in the push's deposit_in_cell) each
-// SIMD group sums its lanes' weights cell by cell with simd_sum and adds one
-// atomic per corner, falling back to direct atomics after MAX_CELL_PASSES
-// cells. Every lane reaches the SIMD operations (uniform control flow).
+// Trilinear charge deposit into rhof, as k_accumulate_rho_p. When particles
+// are sorted by cell, a SIMD group's lanes span only a few cells, so (as in
+// the push's deposit_in_cell) each SIMD group sums its lanes' weights cell by
+// cell with simd_sum and adds one atomic per corner. Unsorted particles fall
+// back to direct atomics after MAX_CELL_PASSES cells; that costs up to 32
+// extra SIMD reductions per group, as in the push. Every lane reaches the
+// SIMD operations (uniform control flow).
 kernel void accumulate_rho_p(device const float*  p     [[buffer(0)]],
                              device const int*    pidx  [[buffer(1)]],
                              device atomic_float* f     [[buffer(2)]],
@@ -60,11 +56,11 @@ kernel void accumulate_rho_p(device const float*  p     [[buffer(0)]],
   for (int k = 0; k < 8; ++k) w[k] = 0.0f;
   int v = 0;
   if (valid) {
-    float w0 = p[LP_DX * s + i];
-    float w1 = p[LP_DY * s + i];
-    const float dz = p[LP_DZ * s + i];
+    float w0 = p[PDX * s + i];
+    float w1 = p[PDY * s + i];
+    const float dz = p[PDZ * s + i];
     v = pidx[i];
-    float w7 = p[LP_W * s + i] * R.q_8V;
+    float w7 = p[PW * s + i] * R.q_8V;
     float w6 = w7 - w0 * w7;                            // q(1-dx)
     w7 = w7 + w0 * w7;                                  // q(1+dx)
     float w4 = w6 - w1 * w6, w5 = w7 - w1 * w7;         // q(1-dx)(1-dy), q(1+dx)(1-dy)
@@ -109,18 +105,18 @@ kernel void energy_p(device const float*   p        [[buffer(0)]],
   const ulong s = E.stride;
   float en = 0.0f;
   if (i < E.np) {
-    const float dx = p[LP_DX * s + i];
-    const float dy = p[LP_DY * s + i];
-    const float dz = p[LP_DZ * s + i];
-    device const float* f = interp + ulong(pidx[i]) * LP_INTERP_VARS;
-    float v0 = p[LP_UX * s + i] + E.qdt_2mc * ((f[LI_EX] + dy * f[LI_DEXDY]) +
-                                               dz * (f[LI_DEXDZ] + dy * f[LI_D2EXDYDZ]));
-    float v1 = p[LP_UY * s + i] + E.qdt_2mc * ((f[LI_EY] + dz * f[LI_DEYDZ]) +
-                                               dx * (f[LI_DEYDX] + dz * f[LI_D2EYDZDX]));
-    float v2 = p[LP_UZ * s + i] + E.qdt_2mc * ((f[LI_EZ] + dx * f[LI_DEZDX]) +
-                                               dy * (f[LI_DEZDY] + dx * f[LI_D2EZDXDY]));
+    const float dx = p[PDX * s + i];
+    const float dy = p[PDY * s + i];
+    const float dz = p[PDZ * s + i];
+    device const float* f = interp + ulong(pidx[i]) * INTERP_VARS;
+    float v0 = p[PUX * s + i] + E.qdt_2mc * ((f[EX] + dy * f[DEXDY]) +
+                                               dz * (f[DEXDZ] + dy * f[D2EXDYDZ]));
+    float v1 = p[PUY * s + i] + E.qdt_2mc * ((f[EY] + dz * f[DEYDZ]) +
+                                               dx * (f[DEYDX] + dz * f[D2EYDZDX]));
+    float v2 = p[PUZ * s + i] + E.qdt_2mc * ((f[EZ] + dx * f[DEZDX]) +
+                                               dy * (f[DEZDY] + dx * f[D2EZDXDY]));
     v0 = v0 * v0 + v1 * v1 + v2 * v2;
-    en = (E.msp * p[LP_W * s + i]) * (v0 / (1.0f + sqrt(1.0f + v0)));
+    en = (E.msp * p[PW * s + i]) * (v0 / (1.0f + sqrt(1.0f + v0)));
   }
   const float group = simd_sum(en);
   if (lane == 0) partial[gid / 32] = group;

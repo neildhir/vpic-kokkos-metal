@@ -7,16 +7,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-// Layouts shared with the host. They must match field_var, interpolator_var
-// and particle_var in src/vpic/kokkos_helpers.h (checked there by
-// static_asserts next to the call) and grid.h's reflect_particles.
-constant constexpr ulong FIELD_VARS = 16;
-constant constexpr ulong JFX = 12, JFY = 13, JFZ = 14;
-constant constexpr ulong INTERP_VARS = 18;
-enum : ulong { EX = 0, DEXDY, DEXDZ, D2EXDYDZ, EY, DEYDZ, DEYDX, D2EYDZDX,
-               EZ, DEZDX, DEZDY, D2EZDXDY, CBX, DCBXDX, CBY, DCBYDY, CBZ, DCBZDZ };
-enum : ulong { PDX = 0, PDY, PDZ, PUX, PUY, PUZ, PW };
-constant constexpr long REFLECT_PARTICLES = -1;
+// Array layouts (FIELD_VARS, JFX, EX, PDX, ...) are in layout.metal
 
 // Must match vpic_metal_push_params in metal_push.mm (8-byte members first)
 struct PushParams {

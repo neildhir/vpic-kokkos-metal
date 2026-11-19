@@ -500,7 +500,8 @@ if (VPIC_ENABLE_METAL)
   add_definitions(-DVPIC_ENABLE_METAL)
   # Embed the Metal kernels; the Metal framework compiles them at run time,
   # so no Metal toolchain is needed to build
-  set(_vpic_metal_kernels ${CMAKE_SOURCE_DIR}/src/metal/advance_p.metal ${CMAKE_SOURCE_DIR}/src/metal/sort.metal
+  set(_vpic_metal_kernels ${CMAKE_SOURCE_DIR}/src/metal/layout.metal
+    ${CMAKE_SOURCE_DIR}/src/metal/advance_p.metal ${CMAKE_SOURCE_DIR}/src/metal/sort.metal
     ${CMAKE_SOURCE_DIR}/src/metal/particle_loops.metal)
   set(_vpic_metal_source "")
   foreach(_kernel ${_vpic_metal_kernels})

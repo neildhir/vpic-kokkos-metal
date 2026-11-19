@@ -1126,9 +1126,9 @@ advance_p_kokkos_gpu(
 }
 
 #ifdef VPIC_ENABLE_METAL
-// The Metal kernel (src/metal/advance_p.metal) hard-codes these layouts.
+// The Metal kernels hard-code these layouts (src/metal/layout.metal).
 static_assert(FIELD_VAR_COUNT == 16 && field_var::jfx == 12 &&
-              field_var::jfy == 13 && field_var::jfz == 14,
+              field_var::jfy == 13 && field_var::jfz == 14 && field_var::rhof == 15,
               "update advance_p.metal for the new field layout");
 static_assert(INTERPOLATOR_VAR_COUNT == 18 && interpolator_var::ex == 0 &&
               interpolator_var::dcbzdz == 17,

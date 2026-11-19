@@ -229,25 +229,42 @@ Wrapped wrap(Context& c, const void* data, size_t bytes, const char* what) {
   return w;
 }
 
-// Run a particle loop over np particles in command buffers of at most
-// c.chunk particles (rounded down to whole SIMD groups), wait for them, and
-// return the GPU time. bind(encoder, first particle, particles) sets the
-// pipeline's arguments for one chunk.
+// Threads per threadgroup for a particle kernel: c.threads (from the push),
+// capped by what this pipeline allows, in whole 32-wide SIMD groups. Kernels
+// that index SIMD groups by thread position (energy_p) rely on both.
+NSUInteger particle_threads(Context& c, id<MTLComputePipelineState> pso, const char* what) {
+  if (pso.threadExecutionWidth != 32)
+    fail(std::string("the ") + what + " kernel needs 32-wide SIMD groups; this GPU has " +
+         std::to_string(pso.threadExecutionWidth));
+  const NSUInteger t = std::min<NSUInteger>(c.threads, pso.maxTotalThreadsPerThreadgroup) / 32 * 32;
+  if (t == 0) fail(std::string("the ") + what + " kernel allows fewer than 32 threads per threadgroup");
+  return t;
+}
+
+// Queue a particle kernel over np particles, in command buffers of at most
+// c.chunk particles (rounded down to whole SIMD groups) so that none runs long
+// enough for the macOS GPU watchdog. bind(encoder, first particle, particles)
+// sets the arguments for one chunk. Command buffers on one queue run in order.
 template <class Bind>
-double particle_loop(Context& c, id<MTLComputePipelineState> pso, size_t np, const char* what, Bind bind) {
+void queue_particle_pass(Context& c, NSMutableArray<id<MTLCommandBuffer>>* all, id<MTLComputePipelineState> pso,
+                         size_t np, const char* what, Bind bind) {
+  const NSUInteger threads = particle_threads(c, pso, what);
   const size_t chunk = std::max<size_t>(32, c.chunk / 32 * 32);
-  NSMutableArray<id<MTLCommandBuffer>>* all = [NSMutableArray array];
   for (size_t first = 0; first < np; first += chunk) {
     const size_t n = std::min(chunk, np - first);
     id<MTLCommandBuffer> cb = [c.queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:pso];
     bind(enc, first, n);
-    [enc dispatchThreads:MTLSizeMake(n, 1, 1) threadsPerThreadgroup:MTLSizeMake(c.threads, 1, 1)];
+    [enc dispatchThreads:MTLSizeMake(n, 1, 1) threadsPerThreadgroup:MTLSizeMake(threads, 1, 1)];
     [enc endEncoding];
     [cb commit];
     [all addObject:cb];
   }
+}
+
+// Wait for the queued command buffers, abort if any failed, return the GPU time
+double finish(NSMutableArray<id<MTLCommandBuffer>>* all, const char* what) {
   [all.lastObject waitUntilCompleted];
   double gpu = 0;
   for (id<MTLCommandBuffer> cb in all) {
@@ -257,6 +274,14 @@ double particle_loop(Context& c, id<MTLComputePipelineState> pso, size_t np, con
     gpu += cb.GPUEndTime - cb.GPUStartTime;
   }
   return gpu;
+}
+
+// Run one particle kernel and wait for it; returns the GPU time
+template <class Bind>
+double particle_loop(Context& c, id<MTLComputePipelineState> pso, size_t np, const char* what, Bind bind) {
+  NSMutableArray<id<MTLCommandBuffer>>* all = [NSMutableArray array];
+  queue_particle_pass(c, all, pso, np, what, bind);
+  return finish(all, what);
 }
 
 }  // namespace
@@ -300,37 +325,17 @@ size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
     P.nx = a.nx; P.ny = a.ny; P.nz = a.nz;
     P.has_neighbors = a.neighbors != nullptr;
 
-    // One command buffer per chunk of particles, all queued before waiting.
-    // Command buffers on one queue run in order; the mover counter carries
-    // over between them.
-    id<MTLCommandBuffer> last = nil;
+    // One command buffer per chunk of particles, all queued before waiting;
+    // the mover counter carries over between them.
     NSMutableArray<id<MTLCommandBuffer>>* all = [NSMutableArray array];
-    for (size_t first = 0; first < a.np; first += c.chunk) {
-      const size_t n = std::min(c.chunk, a.np - first);
+    queue_particle_pass(c, all, c.push, a.np, "push", [&](id<MTLComputeCommandEncoder> enc, size_t first, size_t) {
       P.first = first;
-      id<MTLCommandBuffer> cb = [c.queue commandBuffer];
-      id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
-      [enc setComputePipelineState:c.push];
       for (NSUInteger k = 0; k < 9; ++k)
         [enc setBuffer:buffers[k].buffer offset:buffers[k].offset atIndex:k];
       [enc setBuffer:c.counters offset:0 atIndex:9];
       [enc setBytes:&P length:sizeof(P) atIndex:10];
-      [enc dispatchThreads:MTLSizeMake(n, 1, 1)
-          threadsPerThreadgroup:MTLSizeMake(c.threads, 1, 1)];
-      [enc endEncoding];
-      [cb commit];
-      [all addObject:cb];
-      last = cb;
-    }
-    [last waitUntilCompleted];
-
-    double gpu = 0;
-    for (id<MTLCommandBuffer> cb in all) {
-      if (cb.status != MTLCommandBufferStatusCompleted)
-        fail(std::string("a push command buffer failed: ") +
-             (cb.error ? cb.error.localizedDescription.UTF8String : "unknown error"));
-      gpu += cb.GPUEndTime - cb.GPUStartTime;
-    }
+    });
+    const double gpu = finish(all, "push");
     if (counters[1]) fail("the mover list overflowed (max_nm too small for this species)");
     if (counters[2])
       fail("a particle left its cell before VPIC built the grid's neighbor table "
@@ -380,17 +385,9 @@ void vpic_metal_sort_particles(const vpic_metal_sort_args& a) {
     NSMutableArray<id<MTLCommandBuffer>>* all = [NSMutableArray array];
     auto commit = [&](id<MTLCommandBuffer> cb) { [cb commit]; [all addObject:cb]; };
     auto particle_pass = [&](id<MTLComputePipelineState> pso, auto bind) {
-      for (size_t first = 0; first < a.np; first += c.chunk) {
-        const size_t n = std::min(c.chunk, a.np - first);
-        const vpic_metal_sort_params S{a.np, a.particle_stride, first};
-        id<MTLCommandBuffer> cb = [c.queue commandBuffer];
-        id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
-        [enc setComputePipelineState:pso];
-        bind(enc, S);
-        [enc dispatchThreads:MTLSizeMake(n, 1, 1) threadsPerThreadgroup:MTLSizeMake(c.threads, 1, 1)];
-        [enc endEncoding];
-        commit(cb);
-      }
+      queue_particle_pass(c, all, pso, a.np, "sort", [&](id<MTLComputeCommandEncoder> enc, size_t first, size_t) {
+        bind(enc, vpic_metal_sort_params{a.np, a.particle_stride, first});
+      });
     };
 
     // 1. Clear the counts, then count particles per cell (with their ranks)
@@ -448,8 +445,9 @@ void vpic_metal_sort_particles(const vpic_metal_sort_args& a) {
 
     // 4. Copy the sorted particles back over the originals, column by column
     const NSUInteger column = a.particle_stride * sizeof(float);
-    for (size_t first = 0; first < a.np; first += c.chunk) {
-      const size_t n = std::min(c.chunk, a.np - first);
+    const size_t chunk = std::max<size_t>(32, c.chunk / 32 * 32);
+    for (size_t first = 0; first < a.np; first += chunk) {
+      const size_t n = std::min(chunk, a.np - first);
       id<MTLCommandBuffer> cb = [c.queue commandBuffer];
       id<MTLBlitCommandEncoder> back = [cb blitCommandEncoder];
       for (NSUInteger v = 0; v < 7; ++v)
@@ -461,14 +459,7 @@ void vpic_metal_sort_particles(const vpic_metal_sort_args& a) {
       commit(cb);
     }
 
-    [all.lastObject waitUntilCompleted];
-    double gpu = 0;
-    for (id<MTLCommandBuffer> cb in all) {
-      if (cb.status != MTLCommandBufferStatusCompleted)
-        fail(std::string("a sort command buffer failed: ") +
-             (cb.error ? cb.error.localizedDescription.UTF8String : "unknown error"));
-      gpu += cb.GPUEndTime - cb.GPUStartTime;
-    }
+    const double gpu = finish(all, "sort");
     c.sort_gpu_seconds += gpu;
     c.sort_calls += 1;
     if (c.profile)

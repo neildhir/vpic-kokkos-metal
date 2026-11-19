@@ -238,16 +238,37 @@ energy_p_kokkos(const species_t* RESTRICT sp,
       a.nvoxels           = ia->k_i_d.extent(0);
       a.qdt_2mc           = qdt_2mc;
       a.msp               = sp->m;
+      Kokkos::fence();   // the GPU reads arrays Kokkos kernels may just have written
       local = vpic_metal_energy_p( a );
-      // VPIC_METAL_PARTICLE_LOOPS_CHECK: compare with the CPU sum, keep the CPU value
+      // VPIC_METAL_PARTICLE_LOOPS_CHECK: compare the GPU and CPU sums with the
+      // same per-particle arithmetic summed in double on the host (the CPU
+      // kernel sums in float when built with VPIC_DISABLE_DEVICE_FP64). The
+      // terms are never negative, so a zero reference means every term is zero.
+      // Keeps the reference value.
       if( vpic_metal_particle_loops_check_enabled() ) {
         const double cpu = energy_p_kernel(ia->k_i_d, sp->k_p_d, sp->k_p_i_d, qdt_2mc, sp->m, sp->np);
         Kokkos::fence();
-        const double rel = cpu!=0 ? std::fabs(local-cpu)/std::fabs(cpu) : std::fabs(local);
-        MESSAGE(( "Metal energy check (%s, %zu particles): GPU %.9g, CPU %.9g, relative difference %.3g",
-                  sp->name, size_t(sp->np), local, cpu, rel ));
-        if( rel>1e-5 ) ERROR(( "Metal energy sum differs from the CPU sum" ));
-        local = cpu;
+        double ref = 0;
+        for( size_t n=0; n<size_t(sp->np); n++ ) {
+          const float dx = sp->k_p_d(n, particle_var::dx), dy = sp->k_p_d(n, particle_var::dy),
+                      dz = sp->k_p_d(n, particle_var::dz);
+          const int i = sp->k_p_i_d(n);
+          const auto& k = ia->k_i_d;
+          float v0 = sp->k_p_d(n, particle_var::ux) + qdt_2mc*( ( k(i, interpolator_var::ex) + dy*k(i, interpolator_var::dexdy) ) +
+                                                                 dz*( k(i, interpolator_var::dexdz) + dy*k(i, interpolator_var::d2exdydz) ) );
+          float v1 = sp->k_p_d(n, particle_var::uy) + qdt_2mc*( ( k(i, interpolator_var::ey) + dz*k(i, interpolator_var::deydz) ) +
+                                                                 dx*( k(i, interpolator_var::deydx) + dz*k(i, interpolator_var::d2eydzdx) ) );
+          float v2 = sp->k_p_d(n, particle_var::uz) + qdt_2mc*( ( k(i, interpolator_var::ez) + dx*k(i, interpolator_var::dezdx) ) +
+                                                                 dy*( k(i, interpolator_var::dezdy) + dx*k(i, interpolator_var::d2ezdxdy) ) );
+          v0 = v0*v0 + v1*v1 + v2*v2;
+          v0 = (sp->m * sp->k_p_d(n, particle_var::w)) * (v0 / (1 + sqrtf(1 + v0)));
+          ref += double(v0);
+        }
+        auto rel = [ref](double x) { return ref!=0 ? std::fabs(x-ref)/ref : ( x==0 ? 0.0 : HUGE_VAL ); };
+        MESSAGE(( "Metal energy check (%s, %zu particles): relative error against a double sum: GPU %.3g, CPU %.3g",
+                  sp->name, size_t(sp->np), rel(local), rel(cpu) ));
+        if( rel(local)>1e-5 ) ERROR(( "Metal energy sum differs from the double-precision reference" ));
+        local = ref;
       }
     } else
 #endif

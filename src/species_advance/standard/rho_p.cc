@@ -524,34 +524,58 @@ k_accumulate_rho_p_metal( /**/  field_array_t * RESTRICT fa,
   a.q_8V              = (sp->q)*(sp->g->r8V);
   a.sy                = sp->g->sy;
   a.sz                = sp->g->sz;
+  Kokkos::fence();   // the GPU reads and adds to arrays Kokkos kernels just wrote
   vpic_metal_accumulate_rho_p( a );
 }
 
 // VPIC_METAL_PARTICLE_LOOPS_CHECK: run the GPU deposit and the CPU deposit
-// from the same rhof, report the largest difference relative to the largest
-// deposited value, and keep the CPU result.
+// from the same rhof and compare both with a reference that computes each
+// particle's weights as the CPU loop does but sums them in double. Float sums
+// of many near-equal weights drift (a single-threaded float sum of 10^6
+// weights in one cell is about 3e-4 low), so the reference, not the CPU
+// result, decides. Keeps the CPU result.
 static void
 k_accumulate_rho_p_checked( /**/  field_array_t * RESTRICT fa,
                             const species_t     * RESTRICT sp )
 {
   k_field_t& f = fa->k_f_d;
   const size_t nv = f.extent(0);
+  Kokkos::fence();
   std::vector<float> before( nv ), gpu( nv );
+  std::vector<double> ref( nv, 0.0 );
   for( size_t v=0; v<nv; v++ ) before[v] = f(v, field_var::rhof);
+
+  const float q_8V = (sp->q)*(sp->g->r8V);
+  const int sy = sp->g->sy, sz = sp->g->sz;
+  for( size_t n=0; n<size_t(sp->np); n++ ) {   // statement for statement as k_accumulate_rho_p_cpu
+    float w0 = sp->k_p_d(n, particle_var::dx), w1 = sp->k_p_d(n, particle_var::dy);
+    const float dz = sp->k_p_d(n, particle_var::dz);
+    const int v = sp->k_p_i_d(n);
+    float w7 = sp->k_p_d(n, particle_var::w) * q_8V;
+    float w6 = w7 - w0*w7;  w7 = w7 + w0*w7;
+    float w4 = w6 - w1*w6, w5 = w7 - w1*w7;  w6 = w6 + w1*w6;  w7 = w7 + w1*w7;
+    const float w[8] = { w4 - dz*w4, w5 - dz*w5, w6 - dz*w6, w7 - dz*w7,
+                         w4 + dz*w4, w5 + dz*w5, w6 + dz*w6, w7 + dz*w7 };
+    const int corner[8] = { v, v+1, v+sy, v+sy+1, v+sz, v+sz+1, v+sz+sy, v+sz+sy+1 };
+    for( int k=0; k<8; k++ ) ref[corner[k]] += double(w[k]);
+  }
+
   k_accumulate_rho_p_metal( fa, sp );
   for( size_t v=0; v<nv; v++ ) { gpu[v] = f(v, field_var::rhof); f(v, field_var::rhof) = before[v]; }
   k_accumulate_rho_p_cpu( fa, sp );
   Kokkos::fence();
-  double max_diff = 0, max_dep = 0;
+  double gpu_err = 0, cpu_err = 0, max_dep = 0;
   for( size_t v=0; v<nv; v++ ) {
-    const double cpu = f(v, field_var::rhof);
-    max_diff = std::max( max_diff, std::fabs( double(gpu[v]) - cpu ) );
-    max_dep  = std::max( max_dep,  std::fabs( cpu - double(before[v]) ) );
+    const double exact = double(before[v]) + ref[v];
+    gpu_err = std::max( gpu_err, std::fabs( double(gpu[v]) - exact ) );
+    cpu_err = std::max( cpu_err, std::fabs( double(f(v, field_var::rhof)) - exact ) );
+    max_dep = std::max( max_dep, std::fabs( ref[v] ) );
   }
-  const double rel = max_dep>0 ? max_diff/max_dep : max_diff;
-  MESSAGE(( "Metal charge deposit check (%s, %zu particles): max |GPU-CPU| = %.3g, "
-            "%.3g of the largest deposit", sp->name, size_t(sp->np), max_diff, rel ));
-  if( rel>1e-4 ) ERROR(( "Metal charge deposit differs from the CPU deposit" ));
+  const double scale = max_dep>0 ? max_dep : 1;
+  MESSAGE(( "Metal charge deposit check (%s, %zu particles): largest error against a double sum, "
+            "relative to the largest deposit: GPU %.3g, CPU %.3g",
+            sp->name, size_t(sp->np), gpu_err/scale, cpu_err/scale ));
+  if( gpu_err/scale>1e-5 ) ERROR(( "Metal charge deposit differs from the double-precision reference" ));
 }
 #endif
 
