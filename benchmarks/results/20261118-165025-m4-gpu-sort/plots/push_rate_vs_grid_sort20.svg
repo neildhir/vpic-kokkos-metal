@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="root" width="880" height="462" viewBox="0 0 880 462" role="img" aria-label="Laser-plasma benchmark, particles sorted every 20 steps: particle push rate vs grid size">
+<title>Laser-plasma benchmark, particles sorted every 20 steps: particle push rate vs grid size</title>
+<style>
+.root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.surface { fill: #fcfcfb; }
+.ink { fill: #0b0b0b; }
+.ink2 { fill: #52514e; }
+.muted { fill: #898781; }
+.grid { stroke: #e1e0d9; stroke-width: 1; }
+.axis { stroke: #c3c2b7; stroke-width: 1; }
+.whisker { stroke: #52514e; stroke-width: 1.5; }
+.ref { fill: none; stroke: #52514e; stroke-width: 1.5; }
+.s0 { fill: #2a78d6; stroke: #2a78d6; }
+.s1 { fill: #eb6834; stroke: #eb6834; }
+.s2 { fill: #1baf7a; stroke: #1baf7a; }
+path.line, line.line { fill: none; stroke-width: 2; }  /* beats .sN in both modes */
+.ring { stroke: #fcfcfb; stroke-width: 2; }
+@media (prefers-color-scheme: dark) {
+  .surface { fill: #1a1a19; }
+  .ink { fill: #f0efec; }
+  .ink2 { fill: #c3c2b7; }
+  .grid { stroke: #2c2c2a; }
+  .axis { stroke: #383835; }
+  .whisker, .ref { stroke: #c3c2b7; }
+  .s0 { fill: #3987e5; stroke: #3987e5; }
+  .s1 { fill: #d95926; stroke: #d95926; }
+  .s2 { fill: #199e70; stroke: #199e70; }
+  .ring { stroke: #1a1a19; }
+}
+</style>
+<rect class="surface" x="0" y="0" width="880" height="462"/>
+<text class="ink" x="92.0" y="26.0" font-size="16" font-weight="600" text-anchor="start">Laser-plasma benchmark, particles sorted every 20 steps: particle push rate vs grid size</text>
+<text class="ink2" x="92.0" y="46.0" font-size="12" font-weight="400" text-anchor="start">MacBook Pro (Mac16,1) · Apple M4 · CPU 10 (4P+6E) · GPU 10-core · 16 GiB · macOS 27.2.1 · 20261118-165025-m4-gpu-sort</text>
+<line class="grid" x1="101.6" x2="101.6" y1="64" y2="364"/>
+<text class="muted" x="101.6" y="380.0" font-size="11" font-weight="400" text-anchor="middle">10k</text>
+<line class="grid" x1="183.4" x2="183.4" y1="64" y2="364"/>
+<text class="muted" x="183.4" y="380.0" font-size="11" font-weight="400" text-anchor="middle">20k</text>
+<line class="grid" x1="291.5" x2="291.5" y1="64" y2="364"/>
+<text class="muted" x="291.5" y="380.0" font-size="11" font-weight="400" text-anchor="middle">50k</text>
+<line class="grid" x1="373.2" x2="373.2" y1="64" y2="364"/>
+<text class="muted" x="373.2" y="380.0" font-size="11" font-weight="400" text-anchor="middle">100k</text>
+<line class="grid" x1="455.0" x2="455.0" y1="64" y2="364"/>
+<text class="muted" x="455.0" y="380.0" font-size="11" font-weight="400" text-anchor="middle">200k</text>
+<line class="grid" x1="563.1" x2="563.1" y1="64" y2="364"/>
+<text class="muted" x="563.1" y="380.0" font-size="11" font-weight="400" text-anchor="middle">500k</text>
+<line class="grid" x1="644.8" x2="644.8" y1="64" y2="364"/>
+<text class="muted" x="644.8" y="380.0" font-size="11" font-weight="400" text-anchor="middle">1M</text>
+<line class="grid" x1="726.6" x2="726.6" y1="64" y2="364"/>
+<text class="muted" x="726.6" y="380.0" font-size="11" font-weight="400" text-anchor="middle">2M</text>
+<line class="grid" x1="92" x2="780" y1="319.0" y2="319.0"/>
+<text class="muted" x="84.0" y="323.0" font-size="11" font-weight="400" text-anchor="end">0.2</text>
+<line class="grid" x1="92" x2="780" y1="212.7" y2="212.7"/>
+<text class="muted" x="84.0" y="216.7" font-size="11" font-weight="400" text-anchor="end">0.5</text>
+<line class="grid" x1="92" x2="780" y1="132.2" y2="132.2"/>
+<text class="muted" x="84.0" y="136.2" font-size="11" font-weight="400" text-anchor="end">1</text>
+<line class="axis" x1="92" x2="780" y1="364" y2="364"/>
+<text class="ink2" x="436.0" y="400.0" font-size="12" font-weight="400" text-anchor="middle">Grid points (log scale)</text>
+<text class="ink2" font-size="12" text-anchor="middle" transform="translate(30,214.0) rotate(-90)">Particle pushes per ns (log scale)</text>
+<path class="line s0" d="M139.8,201.6 L354.3,213.5 L486.9,230.7 L732.2,314.8"/>
+<line class="whisker" x1="139.8" x2="139.8" y1="203.2" y2="200.0"/>
+<circle class="s0 ring" cx="139.8" cy="201.6" r="4.5"><title>cpu (CPU, 8×1 ranks×threads): 0.55 pushes/ns at 13,824 grid points (range 0.542-0.558)</title></circle>
+<line class="whisker" x1="354.3" x2="354.3" y1="217.2" y2="211.0"/>
+<circle class="s0 ring" cx="354.3" cy="213.5" r="4.5"><title>cpu (CPU, 8×1 ranks×threads): 0.496 pushes/ns at 85,184 grid points (range 0.481-0.507)</title></circle>
+<line class="whisker" x1="486.9" x2="486.9" y1="234.3" y2="229.0"/>
+<circle class="s0 ring" cx="486.9" cy="230.7" r="4.5"><title>cpu (CPU, 8×1 ranks×threads): 0.428 pushes/ns at 262,144 grid points (range 0.415-0.434)</title></circle>
+<line class="whisker" x1="732.2" x2="732.2" y1="316.9" y2="313.3"/>
+<circle class="s0 ring" cx="732.2" cy="314.8" r="4.5"><title>cpu (CPU, 8×1 ranks×threads): 0.207 pushes/ns at 2,097,152 grid points (range 0.204-0.21)</title></circle>
+<text class="ink2" x="740.2" y="318.8" font-size="11" font-weight="400" text-anchor="start">cpu</text>
+<path class="line s1" d="M139.8,111.2 L354.3,120.6 L486.9,131.0 L732.2,197.4"/>
+<line class="whisker" x1="139.8" x2="139.8" y1="111.5" y2="111.1"/>
+<circle class="s1 ring" cx="139.8" cy="111.2" r="4.5"><title>metal (GPU, 1×4 ranks×threads): 1.2 pushes/ns at 13,824 grid points (range 1.2-1.2)</title></circle>
+<line class="whisker" x1="354.3" x2="354.3" y1="121.3" y2="120.2"/>
+<circle class="s1 ring" cx="354.3" cy="120.6" r="4.5"><title>metal (GPU, 1×4 ranks×threads): 1.11 pushes/ns at 85,184 grid points (range 1.1-1.11)</title></circle>
+<line class="whisker" x1="486.9" x2="486.9" y1="131.1" y2="130.7"/>
+<circle class="s1 ring" cx="486.9" cy="131.0" r="4.5"><title>metal (GPU, 1×4 ranks×threads): 1.01 pushes/ns at 262,144 grid points (range 1.01-1.01)</title></circle>
+<line class="whisker" x1="732.2" x2="732.2" y1="198.2" y2="196.5"/>
+<circle class="s1 ring" cx="732.2" cy="197.4" r="4.5"><title>metal (GPU, 1×4 ranks×threads): 0.57 pushes/ns at 2,097,152 grid points (range 0.566-0.575)</title></circle>
+<text class="ink2" x="740.2" y="201.4" font-size="11" font-weight="400" text-anchor="start">metal</text>
+<line class="line s0" x1="92" x2="108" y1="425" y2="425"/>
+<circle class="s0" cx="100" cy="425" r="4.5"/>
+<text class="ink" x="116.0" y="429.0" font-size="12" font-weight="400" text-anchor="start">cpu (CPU, 8×1 ranks×threads)</text>
+<line class="line s1" x1="336" x2="352" y1="425" y2="425"/>
+<circle class="s1" cx="344" cy="425" r="4.5"/>
+<text class="ink" x="360.0" y="429.0" font-size="12" font-weight="400" text-anchor="start">metal (GPU, 1×4 ranks×threads)</text>
+</svg>
