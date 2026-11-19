@@ -1269,6 +1269,16 @@ advance_p_metal_checked( species_t* sp, interpolator_array_t* ia, field_array_t*
             nm_cpu, nm_gpu, movers_unmatched, movers_differ,
             jdiff[0]/std::max(jmax[0],1e-30), jdiff[1]/std::max(jmax[1],1e-30),
             jdiff[2]/std::max(jmax[2],1e-30), other_differ ));
+
+  // The push follows the CPU code statement for statement, so particles,
+  // cells and movers must match exactly. Currents differ only by the order of
+  // the atomic adds (about 1e-6 of the largest current in practice).
+  const double j_tolerance = 1e-4;
+  bool currents_ok = true;
+  for( int c=0; c<3; c++ ) currents_ok = currents_ok && jdiff[c]<=j_tolerance*std::max( jmax[c], 1e-30 );
+  if( p_differ || cells_differ || nm_cpu!=nm_gpu || movers_unmatched || movers_differ || other_differ || !currents_ok )
+    ERROR(( "Metal push check \"%s\" failed (see the message above; currents may differ by at most %.0e of the largest)",
+            sp->name, j_tolerance ));
 }
 #endif
 

@@ -70,6 +70,7 @@ metal_sort_species( species_t * sp, const grid_t * g, ParticleSorter<> * sorter 
     }
     MESSAGE(( "Metal sort check \"%s\": %zu particles, %zu cell indices differ, "
               "%zu particles differ within their cell", sp->name, np, cells_differ, particles_differ ));
+    if( cells_differ || particles_differ ) ERROR(( "Metal sort check \"%s\" failed", sp->name ));
     return true;
   }
 }

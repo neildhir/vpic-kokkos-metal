@@ -44,7 +44,7 @@ struct vpic_metal_push_args {
 bool vpic_metal_push_enabled();
 
 // True if VPIC_METAL_PUSH_CHECK=1: compare every Metal push against the CPU
-// push from the same state (slow; for validation).
+// push from the same state and abort on a mismatch (slow; for validation).
 bool vpic_metal_push_check_enabled();
 
 // Drop the GPU's wrappers of VPIC's arrays. Wrappers are made once per array
@@ -73,7 +73,8 @@ struct vpic_metal_sort_args {
 // True unless VPIC_METAL_SORT=0, which sorts on the CPU in a Metal build.
 bool vpic_metal_sort_enabled();
 
-// True if VPIC_METAL_SORT_CHECK=1: compare every GPU sort with the CPU sort.
+// True if VPIC_METAL_SORT_CHECK=1: compare every GPU sort with the CPU sort
+// and abort on a mismatch.
 bool vpic_metal_sort_check_enabled();
 
 // Sort the particles. Aborts the run on failure.
