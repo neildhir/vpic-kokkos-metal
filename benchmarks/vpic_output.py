@@ -4,9 +4,10 @@ Pure functions on text, so the tests can feed them captured VPIC output.
 Standard library only.
 """
 
+import math
 import re
 import statistics
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 
 # Phases left out of a step's time: user_diagnostics holds the harness's own
@@ -175,10 +176,12 @@ def energy_differences(
 ) -> dict[str, float]:
     """Per column, max over steps of |other - ref| / max over steps of |ref|.
 
+    A NaN anywhere in a column (either dump) makes that column's difference NaN.
+
     Raises
     ------
     ValueError
-        If the two dumps have different columns or steps.
+        If the two dumps have different columns or steps, or a row has the wrong number of values.
     """
     ref_cols, ref_rows = ref
     cols, rows = other
@@ -186,12 +189,28 @@ def energy_differences(
         raise ValueError(f"energy columns differ: {cols} vs {ref_cols}")
     if [s for s, _ in rows] != [s for s, _ in ref_rows]:
         raise ValueError("energy dumps cover different steps")
+    for step, values in (*ref_rows, *rows):
+        if len(values) != len(cols):
+            raise ValueError(f"energy dump row for step {step} has {len(values)} values, not {len(cols)}")
     out = {}
     for j, name in enumerate(cols):
-        scale = max(abs(v[j]) for _, v in ref_rows) or 1.0
-        out[name] = max(abs(a[j] - b[j]) for (_, a), (_, b) in zip(ref_rows, rows))
-        out[name] /= scale
+        scale = nan_max(abs(v[j]) for _, v in ref_rows) or 1.0
+        out[name] = nan_max(abs(a[j] - b[j]) for (_, a), (_, b) in zip(ref_rows, rows)) / scale
     return out
+
+
+def nan_max(values: Iterable[float]) -> float:
+    """Maximum that returns NaN if any value is NaN (the built-in max drops NaNs after the first element).
+
+    Raises
+    ------
+    ValueError
+        If `values` is empty.
+    """
+    vals = list(values)
+    if not vals:
+        raise ValueError("nan_max of an empty sequence")
+    return math.nan if any(math.isnan(v) for v in vals) else max(vals)
 
 
 def push_rate(particles: float, steps: int, push_s: float) -> float:
@@ -240,11 +259,11 @@ def energy_check(diffs: dict[str, float], tol_bulk: float, tol_fluct: float, bul
 
 
 def worst(diff_sets: list[dict[str, float]]) -> dict[str, float]:
-    """Column-wise maximum over several difference sets."""
+    """Column-wise maximum over several difference sets; a NaN in any set gives NaN."""
     out: dict[str, float] = {}
     for d in diff_sets:
         for k, v in d.items():
-            out[k] = max(out.get(k, 0.0), v)
+            out[k] = nan_max([out.get(k, 0.0), v])
     return out
 
 

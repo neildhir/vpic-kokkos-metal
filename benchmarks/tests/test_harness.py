@@ -13,6 +13,7 @@ from pathlib import Path
 
 import bench_config as bc
 import report
+import vpic_bench
 import vpic_output as vo
 
 DATA = Path(__file__).parent / "data"
@@ -103,6 +104,23 @@ class EnergyTest(unittest.TestCase):
 
     def test_nan_fails(self) -> None:
         self.assertEqual(vo.energy_check({"ex": math.nan, "bz": 0.0}, 1e-3, 1e-2, HARRIS_BULK), ["ex"])
+
+    def test_nan_after_first_step_propagates(self) -> None:
+        cols, rows = self.ref
+        bad = (cols, rows[:-1] + [(rows[-1][0], [math.nan] + rows[-1][1][1:])])  # ex is NaN at the last dump
+        d = vo.energy_differences(self.ref, bad)
+        self.assertTrue(math.isnan(d["ex"]))
+        self.assertEqual(vo.energy_check(d, 1e-3, 1e-2, HARRIS_BULK), ["ex"])
+
+    def test_worst_keeps_nan(self) -> None:
+        w = vo.worst([{"ex": 0.1}, {"ex": math.nan}, {"ex": 0.2}])
+        self.assertTrue(math.isnan(w["ex"]))
+        self.assertEqual(vo.worst([{"ex": 0.1}, {"ex": 0.3}]), {"ex": 0.3})
+
+    def test_ragged_row_raises_value_error(self) -> None:
+        cols, rows = self.ref
+        with self.assertRaises(ValueError):
+            vo.energy_differences(self.ref, (cols, rows[:-1] + [(rows[-1][0], rows[-1][1][:3])]))
 
     def test_mismatched_dumps_raise(self) -> None:
         cols, rows = self.ref
@@ -287,6 +305,30 @@ class SummaryTest(unittest.TestCase):
         md = report.markdown(rec, summary)
         self.assertIn("## Push rate", md)
         self.assertIn("| c | 13,824 | 1,000 | 0.100 | 0.476 |", md)
+
+
+class CompareEnergiesTest(unittest.TestCase):
+    def test_missing_reference_energies_are_recorded_not_raised(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d)
+            (out / "ref").mkdir()  # no energies file
+            (out / "gpu").mkdir()
+            (out / "gpu" / "energies").write_text((DATA / "energies_ref").read_text())
+            runs = [
+                {"case": "c", "build": "cpu", "phase": "measure", "dir": "ref", "error": None},
+                {"case": "c", "build": "metal", "phase": "measure", "dir": "gpu", "error": None},
+            ]
+            record: dict = {"runs": runs, "warnings": []}
+            case = bc.Case("c", deck="harris", nx=8, ny=8, nz=1, nppc=2, nstep=40)
+            vpic_bench.compare_energies(case, "cpu", record, out)
+            self.assertTrue(all("energy_error" in r for r in runs))
+            self.assertEqual(len(record["warnings"]), 1)
+
+    def test_is_good_rejects_runs_with_errors(self) -> None:
+        self.assertTrue(vpic_bench.is_good({"error": None, "metrics": {"steady_ms_per_step": 1.0}}))
+        bad_count = {"error": "log reports 1 particles", "metrics": {"steady_ms_per_step": 1.0}}
+        self.assertFalse(vpic_bench.is_good(bad_count))
+        self.assertFalse(vpic_bench.is_good({"error": None, "metrics": None}))
 
 
 if __name__ == "__main__":

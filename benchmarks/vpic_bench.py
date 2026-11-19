@@ -358,7 +358,7 @@ def run_case(
             continue
         if len(valid) > 1:
             sweep = [one_run(case, label, builds[label], lay, "sweep", 0, cfg, out, record, exclude) for lay in valid]
-            timed = [(r["metrics"]["steady_ms_per_step"], r["layout"]) for r in sweep if r.get("metrics")]
+            timed = [(r["metrics"]["steady_ms_per_step"], r["layout"]) for r in sweep if is_good(r)]
             if not timed:
                 continue
             best[label] = bc.parse_layout(min(timed)[1])
@@ -428,9 +428,11 @@ def one_run(
             run["metrics"] = m.__dict__
         except ValueError as e:
             run["error"] = f"unparseable log: {e}"
-        # VPIC prints nptotal with 6 significant digits
-        if parsed.nptotal is None or abs(parsed.nptotal / case.particles - 1) > 1e-5 or parsed.nstep != case.nstep:
-            run["error"] = f"log reports {parsed.nptotal} particles / {parsed.nstep} steps, not the case's"
+    # VPIC prints nptotal with 6 significant digits
+    if run["error"] is None and (
+        parsed.nptotal is None or abs(parsed.nptotal / case.particles - 1) > 1e-5 or parsed.nstep != case.nstep
+    ):
+        run["error"] = f"log reports {parsed.nptotal} particles / {parsed.nstep} steps, not the case's"
     if "vpic_git_hash" not in record["builds"][label] and parsed.build_details:
         record["builds"][label]["vpic_git_hash"] = parsed.build_details.get("VPIC Git Hash", "?")
         record["builds"][label]["build_details"] = parsed.build_details
@@ -466,14 +468,29 @@ def wait_for_idle(cfg: bc.Config, exclude: set[int]) -> list[mach.BusyProcess]:
     return busy
 
 
+def is_good(run: dict[str, Any]) -> bool:
+    """True if the run finished without error and has timings."""
+    return not run.get("error") and bool(run.get("metrics"))
+
+
 def compare_energies(case: bc.Case, reference: str, record: dict[str, Any], out: Path) -> None:
-    """Attach to every run of the case its energy difference from the reference's first measured run."""
+    """Attach to every run of the case its energy difference from the reference's first measured run.
+
+    A run whose energies (or the reference's) cannot be read or compared gets ``energy_error`` instead;
+    nothing here stops the remaining cases.
+    """
     runs = [r for r in record["runs"] if r["case"] == case.name and not r["error"]]
     ref = next((r for r in runs if r["build"] == reference and r["phase"] == "measure"), None)
     if ref is None:
         record["warnings"].append(f"{case.name}: reference {reference} has no successful measured run")
         return
-    ref_e = vo.parse_energies((out / ref["dir"] / "energies").read_text())
+    try:
+        ref_e = vo.parse_energies((out / ref["dir"] / "energies").read_text())
+    except (OSError, ValueError) as e:
+        for r in runs:
+            r["energy_error"] = f"reference energies unreadable: {e}"
+        record["warnings"].append(f"{case.name}: reference {reference} energies unreadable: {e}")
+        return
     for r in runs:
         path = out / r["dir"] / "energies"
         try:
