@@ -45,6 +45,13 @@ struct vpic_metal_energy_params {
 };
 static_assert(sizeof(vpic_metal_energy_params) == 32, "EnergyParams layout changed");
 
+// Must match FieldParams in fields.metal
+struct vpic_metal_field_params {
+  int32_t nx, ny, nz;
+  float   px, py, pz;
+};
+static_assert(sizeof(vpic_metal_field_params) == 24, "FieldParams layout changed");
+
 [[noreturn]] void fail(const std::string& why) {
   fprintf(stderr, "VPIC Metal push: %s\n", why.c_str());
   fflush(stderr);
@@ -94,6 +101,11 @@ struct Context {
   id<MTLBuffer> energy_partial = nil;   // one float per SIMD group, read on the host
   double   loops_gpu_seconds = 0;
   uint64_t rho_calls = 0, energy_calls = 0;
+
+  // Field kernels
+  id<MTLComputePipelineState> advance_b = nil, load_interpolator = nil, clear_jf = nil;
+  double   fields_gpu_seconds = 0;
+  uint64_t field_calls = 0;
 };
 
 // Grow a scratch buffer to at least bytes (contents are not kept)
@@ -160,6 +172,9 @@ Context& context() {
     c.sort_scatter = pipeline(c.device, library, @"sort_scatter");
     c.rho = pipeline(c.device, library, @"accumulate_rho_p");
     c.energy = pipeline(c.device, library, @"energy_p");
+    c.advance_b = pipeline(c.device, library, @"advance_b");
+    c.load_interpolator = pipeline(c.device, library, @"load_interpolator");
+    c.clear_jf = pipeline(c.device, library, @"clear_jf");
     // The scan kernels assume 32-wide SIMD groups and full threadgroups
     if (c.scan_blocks.threadExecutionWidth != 32)
       fail("the scan kernels need 32-wide SIMD groups; this GPU has " +
@@ -195,6 +210,9 @@ Context& context() {
         if (c.sort_calls)
           fprintf(stderr, "[vpic-metal] sort totals: %llu calls, %.3f s GPU\n",
                   (unsigned long long)c.sort_calls, c.sort_gpu_seconds);
+        if (c.field_calls)
+          fprintf(stderr, "[vpic-metal] field totals: %llu calls, %.3f s GPU\n",
+                  (unsigned long long)c.field_calls, c.fields_gpu_seconds);
         if (c.rho_calls + c.energy_calls)
           fprintf(stderr, "[vpic-metal] rho and energy totals: %llu + %llu calls, %.3f s GPU\n",
                   (unsigned long long)c.rho_calls, (unsigned long long)c.energy_calls, c.loops_gpu_seconds);
@@ -536,5 +554,79 @@ double vpic_metal_energy_p(const vpic_metal_energy_args& a) {
     if (c.profile)
       fprintf(stderr, "[vpic-metal] energy %zu particles: %.3f ms GPU\n", a.np, 1e3 * gpu);
     return en;
+  }
+}
+
+// Off by default: on a base M4 these kernels are no faster than the CPU (see metal_push.h)
+bool vpic_metal_fields_enabled() { return env_flag("VPIC_METAL_FIELDS", false); }
+
+bool vpic_metal_fields_check_enabled() { return env_flag("VPIC_METAL_FIELDS_CHECK", false); }
+
+namespace {
+
+// Run one grid kernel over (nx, ny, nz) threads (x fastest) and wait for it.
+// Field kernels touch each voxel once and finish in milliseconds, so one
+// command buffer is well within the macOS GPU watchdog.
+template <class Bind>
+void field_kernel(Context& c, id<MTLComputePipelineState> pso, MTLSize grid, const char* what, Bind bind) {
+  if (grid.width == 0 || grid.height == 0 || grid.depth == 0) return;
+  NSMutableArray<id<MTLCommandBuffer>>* all = [NSMutableArray array];
+  id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  [enc setComputePipelineState:pso];
+  bind(enc);
+  // Threadgroups of up to 64 x 4 threads: x (contiguous voxels) first, then y
+  const NSUInteger tx = std::min<NSUInteger>({NSUInteger(64), grid.width, pso.maxTotalThreadsPerThreadgroup});
+  const NSUInteger ty = std::min<NSUInteger>({NSUInteger(4), grid.height, pso.maxTotalThreadsPerThreadgroup / tx});
+  [enc dispatchThreads:grid threadsPerThreadgroup:MTLSizeMake(tx, ty, 1)];
+  [enc endEncoding];
+  [cb commit];
+  [all addObject:cb];
+  const double gpu = finish(all, what);
+  c.fields_gpu_seconds += gpu;
+  c.field_calls += 1;
+  if (c.profile) fprintf(stderr, "[vpic-metal] %s: %.3f ms GPU\n", what, 1e3 * gpu);
+}
+
+}  // namespace
+
+void vpic_metal_advance_b(const vpic_metal_field_args& a) {
+  @autoreleasepool {
+    Context& c = context();
+    const Wrapped f = wrap(c, a.fields, a.nvoxels * 16 * sizeof(float), "the fields");
+    const vpic_metal_field_params G{a.nx, a.ny, a.nz, a.px, a.py, a.pz};
+    field_kernel(c, c.advance_b, MTLSizeMake(a.nx + 1, a.ny + 1, a.nz + 1), "advance_b",
+                 [&](id<MTLComputeCommandEncoder> enc) {
+      [enc setBuffer:f.buffer offset:f.offset atIndex:0];
+      [enc setBytes:&G length:sizeof(G) atIndex:1];
+    });
+  }
+}
+
+void vpic_metal_load_interpolator(const vpic_metal_field_args& a) {
+  @autoreleasepool {
+    Context& c = context();
+    const Wrapped f = wrap(c, a.fields, a.nvoxels * 16 * sizeof(float), "the fields");
+    const Wrapped ia = wrap(c, a.interpolators, a.nvoxels * 18 * sizeof(float), "the interpolators");
+    const vpic_metal_field_params G{a.nx, a.ny, a.nz, 0, 0, 0};
+    field_kernel(c, c.load_interpolator, MTLSizeMake(a.nx, a.ny, a.nz), "load_interpolator",
+                 [&](id<MTLComputeCommandEncoder> enc) {
+      [enc setBuffer:ia.buffer offset:ia.offset atIndex:0];
+      [enc setBuffer:f.buffer offset:f.offset atIndex:1];
+      [enc setBytes:&G length:sizeof(G) atIndex:2];
+    });
+  }
+}
+
+void vpic_metal_clear_jf(const vpic_metal_field_args& a) {
+  if (a.nvoxels > UINT32_MAX) fail("clear_jf counts voxels with 32-bit integers");
+  @autoreleasepool {
+    Context& c = context();
+    const Wrapped f = wrap(c, a.fields, a.nvoxels * 16 * sizeof(float), "the fields");
+    const uint32_t nv = uint32_t(a.nvoxels);
+    field_kernel(c, c.clear_jf, MTLSizeMake(a.nvoxels, 1, 1), "clear_jf", [&](id<MTLComputeCommandEncoder> enc) {
+      [enc setBuffer:f.buffer offset:f.offset atIndex:0];
+      [enc setBytes:&nv length:sizeof(nv) atIndex:1];
+    });
   }
 }

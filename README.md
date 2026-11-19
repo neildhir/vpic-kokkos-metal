@@ -1,3 +1,5 @@
+# VPIC-Kokkos
+
 Welcome to the Kokkos version of the Vector Particle-in-Cell code, VPIC 2.0!
 VPIC is a 3D3V, fully relativistic, kinetic, performance-first PIC code for
 solving the coupled Maxwell-Boltzmann system of equations. Utilizing the Kokkos
@@ -5,11 +7,15 @@ performance-portable framework, VPIC achieves high performance on multiple CPU
 and GPU architectures.
 
 The primary documentation for VPIC has moved to Sphinx and is hosted on GitHub
-Pages [here](https://lanl.github.io/vpic-kokkos/index.html), and located in
+Pages ([VPIC documentation](https://lanl.github.io/vpic-kokkos/index.html)), and located in
 `docs/`.  The documentation is still a work in progress, but hopefully
 sufficient to get most users started.
 
-# Attribution
+This fork adds a Metal GPU backend for Apple Silicon Macs (M1 or newer). See
+[APPLE_SILICON.md](APPLE_SILICON.md) for how to build and run it, and
+[benchmarks/report/README.md](benchmarks/report/README.md) for its performance.
+
+## Attribution
 
 Researchers who use the VPIC code for scientific research are asked to cite
 the papers listed below.
@@ -22,20 +28,19 @@ Transactions on Parallel and Distributed Systems, 33(4), 952-963.
 D. J. Kerbyson, "0.374 Pflop/s Trillion-Particle Kinetic Modeling of
 Laser Plasma Interaction on Road-runner," Proc. 2008 ACM/IEEE Conf.
 Supercomputing (Gordon Bell Prize Finalist Paper).
-http://dl.acm.org/citation.cfm?id=1413435
+<http://dl.acm.org/citation.cfm?id=1413435>
 
 3. K.J. Bowers, B.J. Albright, B. Bergen and T.J.T. Kwan, Ultrahigh
 performance three-dimensional electromagnetic relativistic kinetic
 plasma simulation, Phys. Plasmas 15, 055703 (2008);
-http://dx.doi.org/10.1063/1.2840133
+<http://dx.doi.org/10.1063/1.2840133>
 
 4. K.J. Bowers, B.J. Albright, L. Yin, W. Daughton, V. Roytershteyn,
 B. Bergen and T.J.T Kwan, Advances in petascale kinetic simulations
 with VPIC and Roadrunner, Journal of Physics: Conference Series 180,
 012055, 2009
 
-
-# Copyright
+## Copyright
 
 © 2022. Triad National Security, LLC. All rights reserved.  This program was
 produced under U.S. Government contract 89233218CNA000001 for Los Alamos
@@ -54,11 +59,11 @@ that the following conditions are met:
 
 1. Redistributions of source code must retain the above copyright notice, this
    list of conditions and the following disclaimer.
- 
+
 2. Redistributions in binary form must reproduce the above copyright notice,
 this list of conditions and the following disclaimer in the documentation
 and/or other materials provided with the distribution.
- 
+
 3. Neither the name of the copyright holder nor the names of its contributors
 may be used to endorse or promote products derived from this software without
 specific prior written permission.

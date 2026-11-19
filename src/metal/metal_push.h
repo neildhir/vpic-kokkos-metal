@@ -44,7 +44,8 @@ struct vpic_metal_push_args {
 bool vpic_metal_push_enabled();
 
 // True if VPIC_METAL_PUSH_CHECK=1: compare every Metal push against the CPU
-// push from the same state (slow; for validation).
+// push from the same state and abort on a mismatch beyond rounding (slow; for
+// validation; tolerances in advance_p_metal_checked).
 bool vpic_metal_push_check_enabled();
 
 // Drop the GPU's wrappers of VPIC's arrays. Wrappers are made once per array
@@ -73,7 +74,8 @@ struct vpic_metal_sort_args {
 // True unless VPIC_METAL_SORT=0, which sorts on the CPU in a Metal build.
 bool vpic_metal_sort_enabled();
 
-// True if VPIC_METAL_SORT_CHECK=1: compare every GPU sort with the CPU sort.
+// True if VPIC_METAL_SORT_CHECK=1: compare every GPU sort with the CPU sort
+// and abort on a mismatch.
 bool vpic_metal_sort_check_enabled();
 
 // Sort the particles. Aborts the run on failure.
@@ -119,5 +121,32 @@ void vpic_metal_accumulate_rho_p(const vpic_metal_rho_args& args);
 // rank, in units of c^2; the caller does the MPI sum). Summed per SIMD group
 // in float, then in double on the host. Aborts the run on failure.
 double vpic_metal_energy_p(const vpic_metal_energy_args& args);
+
+// Field kernels on the GPU: advance_b, load_interpolator and clear_jf. Each
+// follows its Kokkos loop statement for statement and matches it bit for bit
+// (Apple GPUs flush denormals to zero, the only difference). Off by default:
+// on a base M4 (about 100 GB/s for CPU and GPU alike) the CPU already runs
+// them at the memory limit, and in 2D its caches hold much of the field
+// array, so the GPU versions gained 3% per step at LPI 128^3 and lost 2-5%
+// on Harris. Chips whose GPU has more bandwidth than the CPU can use (M-series
+// Pro and Max) may differ; enable them with VPIC_METAL_FIELDS=1 to measure.
+struct vpic_metal_field_args {
+  float*       fields;          // 16 floats per voxel
+  float*       interpolators;   // 18 floats per voxel (load_interpolator only)
+  size_t       nvoxels;         // voxels in both arrays
+  int          nx, ny, nz;
+  float        px, py, pz;      // advance_b only: frac * c dt / dx (0 in a collapsed dimension)
+};
+
+// True if VPIC_METAL_FIELDS=1 (default: the CPU runs these field kernels).
+bool vpic_metal_fields_enabled();
+
+// True if VPIC_METAL_FIELDS_CHECK=1: run each field kernel on the CPU and the
+// GPU from the same state and abort unless the results match bit for bit.
+bool vpic_metal_fields_check_enabled();
+
+void vpic_metal_advance_b(const vpic_metal_field_args& args);
+void vpic_metal_load_interpolator(const vpic_metal_field_args& args);
+void vpic_metal_clear_jf(const vpic_metal_field_args& args);
 
 #endif // _vpic_metal_push_h_

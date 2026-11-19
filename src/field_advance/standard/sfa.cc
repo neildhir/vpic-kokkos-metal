@@ -1,5 +1,8 @@
 #define IN_sfa
 #include "sfa_private.h"
+#ifdef VPIC_ENABLE_METAL
+#include "../../metal/metal_field_check.h"
+#endif
 
 static field_advance_kernels_t sfa_kernels = {
 
@@ -292,12 +295,25 @@ void clear_jf_kokkos(field_array_t* RESTRICT fa) {
     if(!fa) ERROR(("Bad args" ));
     k_field_t kfield = fa->k_f_d;
     const int nv = fa->g->nv;
+    auto cpu = [&]() {
     Kokkos::parallel_for("clear_jf", Kokkos::RangePolicy<>(0,nv),
     KOKKOS_LAMBDA(const int v) {
         kfield(v, field_var::jfx) = 0;
         kfield(v, field_var::jfy) = 0;
         kfield(v, field_var::jfz) = 0;
     });
+    };
+#ifdef VPIC_ENABLE_METAL
+    if( vpic_metal_fields_enabled() ) {
+      const vpic_metal_field_args a{ kfield.data(), nullptr, size_t(nv),
+                                     fa->g->nx, fa->g->ny, fa->g->nz, 0, 0, 0 };
+      auto gpu = [&]() { Kokkos::fence(); vpic_metal_clear_jf( a ); };
+      if( vpic_metal_fields_check_enabled() ) vpic_metal_field_checked( "clear_jf", kfield, cpu, gpu );
+      else gpu();
+      return;
+    }
+#endif
+    cpu();
 }
 
 void clear_rhof_kokkos(field_array_t* RESTRICT fa) {

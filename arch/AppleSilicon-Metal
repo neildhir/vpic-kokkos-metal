@@ -1,0 +1,33 @@
+#! /usr/bin/env bash
+#~----------------------------------------------------------------------------~#
+# Apple Silicon Macs (M1 or newer): Kokkos with OpenMP on the CPU, and the
+# particle push, sort, charge deposit and energy sum on the GPU through Metal.
+# See APPLE_SILICON.md. Needs the Xcode command line tools and, from Homebrew,
+# cmake, open-mpi and libomp. Run from an empty build directory below the
+# source directory, e.g.  mkdir build && cd build && ../arch/AppleSilicon-Metal
+#~----------------------------------------------------------------------------~#
+
+src_dir="${0%/*}/.."
+
+# Homebrew's OpenMP runtime (Apple's clang has none of its own)
+libomp="$(brew --prefix libomp 2>/dev/null || echo /opt/homebrew/opt/libomp)"
+if [ ! -d "$libomp" ]; then
+  echo "libomp not found; install it with: brew install libomp" >&2
+  exit 1
+fi
+
+cmake \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_INTEGRATED_TESTS=ON \
+  -DENABLE_UNIT_TESTS=ON \
+  -DBUILD_INTERNAL_KOKKOS=ON \
+  -DENABLE_KOKKOS_OPENMP=ON \
+  -DOpenMP_ROOT="$libomp" \
+  -DVPIC_ENABLE_32BIT_ATOMIC_COUNTERS=ON \
+  -DVPIC_ENABLE_METAL=ON \
+  "$@" \
+  $src_dir
+
+#------------------------------------------------------------------------------#
+# vim: syntax=sh
+#------------------------------------------------------------------------------#

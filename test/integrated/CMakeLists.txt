@@ -1,2 +1,5 @@
 add_subdirectory(legacy)
 add_subdirectory(to_completion)
+if(VPIC_ENABLE_METAL)
+  add_subdirectory(metal)
+endif()

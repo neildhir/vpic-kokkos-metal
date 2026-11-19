@@ -8,6 +8,9 @@
 using namespace metal;
 
 constant constexpr ulong FIELD_VARS = 16;
+// field_var (fields are FIELD_VARS floats per voxel)
+enum : ulong { F_EX = 0, F_EY, F_EZ, F_DIV_E_ERR, F_CBX, F_CBY, F_CBZ, F_DIV_B_ERR,
+               F_TCAX, F_TCAY, F_TCAZ, F_RHOB, F_JFX, F_JFY, F_JFZ, F_RHOF };
 constant constexpr ulong JFX = 12, JFY = 13, JFZ = 14, RHOF = 15;
 constant constexpr ulong INTERP_VARS = 18;
 enum : ulong { EX = 0, DEXDY, DEXDZ, D2EXDYDZ, EY, DEYDZ, DEYDX, D2EYDZDX,

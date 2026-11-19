@@ -1,6 +1,9 @@
 #define IN_sfa
 #define HAS_V4_PIPELINE
 #include "sfa_private.h"
+#ifdef VPIC_ENABLE_METAL
+#include "../../metal/metal_field_check.h"
+#endif
 #include <Kokkos_Core.hpp>
 #include <iostream>
 
@@ -97,6 +100,17 @@ advance_b(field_array_t * RESTRICT fa,
   float  pz   = (nz>1) ? frac*g->cvac*g->dt*g->rdz : 0;
 //printf("Advance_B kernel\n");
 
+#ifdef VPIC_ENABLE_METAL
+  if( vpic_metal_fields_enabled() ) {
+    const vpic_metal_field_args a{ k_field.data(), nullptr, size_t(k_field.extent(0)),
+                                   int(nx), int(ny), int(nz), px, py, pz };
+    auto gpu = [&]() { Kokkos::fence(); vpic_metal_advance_b( a ); };
+    if( vpic_metal_fields_check_enabled() )
+      vpic_metal_field_checked( "advance_b", k_field,
+                                [&]() { advance_b_kokkos(k_field, nx, ny, nz, nv, px, py, pz); }, gpu );
+    else gpu();
+  } else
+#endif
   advance_b_kokkos(k_field, nx, ny, nz, nv, px, py, pz);
 
   local_adjust_norm_b( fa, g );
