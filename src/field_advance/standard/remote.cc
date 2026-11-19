@@ -31,6 +31,24 @@
 
 #endif
 
+// Loops over a face plane, indexed (Y, Z) in the macros below, with
+// (X,Y,Z) = (x,y,z), (y,z,x) or (z,x,y) on x, y and z faces. On the host,
+// Kokkos iterates the last index fastest, which made the x- and z-face loops
+// jump a whole row or plane of voxel records per iteration. Iterate so that
+// consecutive iterations touch neighbouring records instead: Y (y or x)
+// fastest on x and z faces, Z (x) fastest on y faces. Device builds keep
+// Kokkos' default. The order does not change results: each iteration copies,
+// or adds into, its own element.
+template <int i, int j, int k>
+struct face_iteration {
+  static constexpr bool host =
+    Kokkos::SpaceAccessibility<Kokkos::HostSpace, Kokkos::DefaultExecutionSpace::memory_space>::accessible;
+  static constexpr Kokkos::Iterate order =
+    !host ? Kokkos::Iterate::Default : ( j!=0 ? Kokkos::Iterate::Right : Kokkos::Iterate::Left );
+};
+template <int i, int j, int k>
+using face_policy = Kokkos::MDRangePolicy<Kokkos::Rank<2, face_iteration<i,j,k>::order, face_iteration<i,j,k>::order>>;
+
 /*****************************************************************************
  * Ghost value communications
  *
@@ -75,8 +93,8 @@ begin_send_tang_b(field_array_t* fa) {
     const size_t size = (1+n##Y*(n##Z+1)+n##Z*(n##Y+1))*sizeof(float);         \
     const int face = (i+j+k)<0 ? 1 : n##X;                                     \
     const float d##X = fa->g->d##X;                                            \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});\
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});\
+    face_policy<i,j,k> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});                    \
+    face_policy<i,j,k> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});                    \
     Kokkos::parallel_for("beg_send_ghost_tang_b<" #X #Y #Z ">", Z##Y##_edge,   \
       KOKKOS_LAMBDA(const int Y, const int Z) {                                \
         const int X = face;                                                    \
@@ -139,8 +157,8 @@ end_recv_tang_b(field_array_t* fa) {
     rw = (2.*g->d##X)/(lw+g->d##X);                                            \
     lw = (lw-g->d##X)/(lw+g->d##X);                                            \
     const int face = (i+j+k)<0 ? n##X+1 : 0; /* Interpolate */                 \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});\
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});\
+    face_policy<i,j,k> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});                    \
+    face_policy<i,j,k> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});                    \
     Kokkos::parallel_for("end_recv_cb<" #X #Y #Z "> " #Z #Y "_edge",           \
       Z##Y##_edge,  KOKKOS_LAMBDA(const int Y, const int Z) {                  \
       const int X = face;                                                      \
@@ -236,7 +254,7 @@ begin_send_ghost_norm_e(field_array_t* fa) {
     const size_t size = (1+(n##Y+1)*(n##Z+1))*sizeof(float);                   \
     const int face = (i+j+k)<0 ? 1 : n##X;                                     \
     const float d##X = fa->g->d##X;                                            \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> X##_node({1,1}, {n##Y+2, n##Z+2});  \
+    face_policy<i,j,k> X##_node({1,1}, {n##Y+2, n##Z+2});                      \
     Kokkos::parallel_for("beg_send_ghost_norm_e<" #X #Y #Z ">", X##_node,      \
       KOKKOS_LAMBDA(const int Y, const int Z) {                                \
         const int X = face;                                                    \
@@ -293,7 +311,7 @@ end_recv_ghost_norm_e(field_array_t* fa) {
     rw = (2.*g->d##X)/(lw+g->d##X);                                            \
     lw = (lw-g->d##X)/(lw+g->d##X);                                            \
     const int face = (i+j+k)<0 ? n##X+1 : 0; /* Interpolate */                 \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> X##_node({1,1}, {n##Y+2,n##Z+2});   \
+    face_policy<i,j,k> X##_node({1,1}, {n##Y+2,n##Z+2});                       \
     Kokkos::parallel_for("end_recv_ghost_norm_e<" #X #Y #Z "> " #X "_node",    \
       X##_node, KOKKOS_LAMBDA(const int Y, const int Z) {                      \
       const int X = face;                                                      \
@@ -380,7 +398,7 @@ begin_send_ghost_div_b(field_array_t* fa) {
     const size_t size = (1+(n##Y)*(n##Z))*sizeof(float);                       \
     const int face = (i+j+k)<0 ? 1 : n##X;                                     \
     const float d##X = fa->g->d##X;                                            \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> X##_face({1,1}, {n##Y+1, n##Z+1});  \
+    face_policy<i,j,k> X##_face({1,1}, {n##Y+1, n##Z+1});                      \
     Kokkos::parallel_for("beg_send_ghost_div_b<" #X #Y #Z ">", X##_face,       \
       KOKKOS_LAMBDA(const int Y, const int Z) {                                \
         const int X = face;                                                    \
@@ -438,7 +456,7 @@ end_recv_ghost_div_b(field_array_t* fa) {
     rw = (2.*g->d##X)/(lw+g->d##X);                                            \
     lw = (lw-g->d##X)/(lw+g->d##X);                                            \
     const int face = (i+j+k)<0 ? n##X+1 : 0; /* Interpolate */                 \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> X##_face({1,1}, {n##Y+1,n##Z+1});   \
+    face_policy<i,j,k> X##_face({1,1}, {n##Y+1,n##Z+1});                       \
     Kokkos::parallel_for("end_recv_ghost_div_b<" #X #Y #Z "> " #X "_face",     \
       X##_face, KOKKOS_LAMBDA(const int Y, const int Z) {                      \
       const int X = face;                                                      \
@@ -539,14 +557,14 @@ begin_send_tang_e_norm_b(field_array_t* fa) {
     const int size = ( 2*n##Y*(n##Z+1) + 2*n##Z*(n##Y+1) +                     \
                        n##Y*n##Z )*sizeof(float);                              \
     const int face = (i+j+k)<0 ? 1 : n##X+1;                                   \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> X##_face({1,1}, {n##Y+1,n##Z+1});   \
+    face_policy<i,j,k> X##_face({1,1}, {n##Y+1,n##Z+1});                       \
     Kokkos::parallel_for("beg_send_tang_e_norm_b<" #X #Y #Z "> " #X "_face",   \
       X##_face, KOKKOS_LAMBDA(const int Y, const int Z) {                      \
       const int X = face;                                                      \
       const size_t voxel = VOXEL(x,y,z,nx,ny,nz);                              \
       sbuf_d((Z-1)*n##Y + (Y-1)) = kfield(voxel, field_var::cb##X);            \
     });                                                                        \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});\
+    face_policy<i,j,k> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});                    \
     Kokkos::parallel_for("beg_send_tang_e_norm_b<" #X #Y #Z "> " #Y #Z "_edge",\
       Y##Z##_edge, KOKKOS_LAMBDA(const int Y, const int Z) {                   \
       const int X = face;                                                      \
@@ -555,7 +573,7 @@ begin_send_tang_e_norm_b(field_array_t* fa) {
       sbuf_d(offset) = kfield(voxel, field_var::e##Y);                         \
       sbuf_d(offset + 1) = kfield(voxel, field_var::tca##Y);                   \
     });                                                                        \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});\
+    face_policy<i,j,k> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});                    \
     Kokkos::parallel_for("beg_send_tang_e_norm_b<" #X #Y #Z "> " #Z #Y "_edge",\
       Z##Y##_edge, KOKKOS_LAMBDA(const int Y, const int Z) {                   \
       const int X = face;                                                      \
@@ -730,8 +748,8 @@ begin_send_jf(field_array_t* fa) {
                        n##Z*(n##Y+1) + 1 )*sizeof(float);                      \
     const int face = (i+j+k)<0 ? 1 : n##X+1;                                   \
     const float d##X = fa->g->d##X;                                            \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});\
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});\
+    face_policy<i,j,k> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});                    \
+    face_policy<i,j,k> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});                    \
     Kokkos::parallel_for("beg_send_jf<" #X #Y #Z "> " #Y #Z "_edge",           \
       Y##Z##_edge, KOKKOS_LAMBDA(const int Y, const int Z) {                   \
       const int X = face;                                                      \
@@ -778,8 +796,8 @@ end_recv_jf(field_array_t* fa) {
     lw  = g->d##X/lw;                                                          \
     lw += lw;                                                                  \
     rw += rw;                                                                  \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});\
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});\
+    face_policy<i,j,k> Y##Z##_edge({1,1}, {n##Y+1,n##Z+2});                    \
+    face_policy<i,j,k> Z##Y##_edge({1,1}, {n##Y+2,n##Z+1});                    \
     Kokkos::parallel_for("end_recv_jf<" #X #Y #Z "> " #Y #Z "_edge",           \
       Y##Z##_edge, KOKKOS_LAMBDA(const int Y, const int Z) {                   \
       const int X = face;                                                      \
@@ -915,7 +933,7 @@ begin_send_rho(field_array_t* fa) {
     const int size = ( 1 + 2*(n##Y+1)*(n##Z+1) )*sizeof(float);                \
     const int face = (i+j+k)<0 ? 1 : n##X+1;                                   \
     const float d##X = fa->g->d##X;                                            \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> X##_node({1,1}, {n##Y+2,n##Z+2});   \
+    face_policy<i,j,k> X##_node({1,1}, {n##Y+2,n##Z+2});                       \
     Kokkos::parallel_for("beg_send_rho<" #X #Y #Z "> " #X "_node", X##_node,   \
       KOKKOS_LAMBDA(const int Y, const int Z) {                                \
       const int X = face;                                                      \
@@ -956,7 +974,7 @@ end_recv_rho(field_array_t* fa) {
     hlw  = g->d##X/hlw;                                                        \
     const float lw = hlw + hlw;                                                \
     const float rw = hrw + hrw;                                                \
-    Kokkos::MDRangePolicy<Kokkos::Rank<2>> X##_node({1,1}, {n##Y+2,n##Z+2});   \
+    face_policy<i,j,k> X##_node({1,1}, {n##Y+2,n##Z+2});                       \
     Kokkos::parallel_for("end_recv_rho<" #X #Y #Z "> " #X "_node", X##_node,   \
       KOKKOS_LAMBDA(const int Y, const int Z) {                                \
       const int X = face;                                                      \
