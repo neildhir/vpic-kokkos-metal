@@ -83,6 +83,9 @@ option(VPIC_DISABLE_DEVICE_FP64 "Keep double precision out of device code, for G
 
 option(VPIC_ENABLE_METAL "Run the particle push on Apple GPUs through Metal (Kokkos runs the rest on the CPU)" OFF)
 
+set(VPIC_SORT_ORDER "auto" CACHE STRING "Particle sort order: auto (chosen by backend), standard (by cell) or strided (cells interleaved)")
+set_property(CACHE VPIC_SORT_ORDER PROPERTY STRINGS auto standard strided)
+
 add_definitions(-DUSE_KOKKOS)
 set(VPIC_CPPFLAGS "${VPIC_CPPFLAGS} -DUSE_KOKKOS") # Set it here for ./deck/ files
 
@@ -476,6 +479,15 @@ if (VPIC_DISABLE_DEVICE_FP64)
   add_definitions(-DVPIC_DISABLE_DEVICE_FP64)
   message("--     VPIC: Disabled double precision in device code")
 endif(VPIC_DISABLE_DEVICE_FP64)
+
+if (NOT VPIC_SORT_ORDER STREQUAL "auto")
+  if (NOT VPIC_SORT_ORDER MATCHES "^(standard|strided)$")
+    message(FATAL_ERROR "VPIC_SORT_ORDER must be auto, standard or strided, not '${VPIC_SORT_ORDER}'")
+  endif()
+  string(TOUPPER "${VPIC_SORT_ORDER}" _vpic_sort_order)
+  add_definitions(-DVPIC_SORT_ORDER_${_vpic_sort_order})
+  message("--     VPIC: Sort order ${VPIC_SORT_ORDER}")
+endif()
 
 set(VPIC_METAL_SRC)
 if (VPIC_ENABLE_METAL)
