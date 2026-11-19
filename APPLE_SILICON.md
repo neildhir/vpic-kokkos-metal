@@ -101,10 +101,28 @@ All settings are environment variables, read when the run starts:
 | `VPIC_METAL_PROFILE` | off | `1` prints the GPU time of every kernel call, and totals at exit |
 | `VPIC_METAL_CHUNK` | 16777216 | Particles per GPU command buffer; lower it if macOS reports a GPU timeout |
 | `VPIC_METAL_FAST_MATH` | off | `1` uses fast GPU maths; results then differ from the CPU, for experiments only |
+| `VPIC_METAL_THREADS` | 256 | Threads per threadgroup for particle kernels; 64 to 1024 are within 2% on an M4 |
 
 The GPU field kernels are off by default because on a base M4 they are no faster than the CPU. The field solve is
 limited by memory bandwidth, which the CPU and GPU share. On a Pro, Max or Ultra chip, whose GPU has much more
 bandwidth than its CPU can use, they may help. Try a short run with and without `VPIC_METAL_FIELDS=1`.
+
+## Profiling
+
+`VPIC_METAL_PROFILE=1` prints, for every GPU call, its GPU time, and for the push also the host time spent encoding,
+waiting for the GPU to start and waking after it finishes. At exit it prints totals, and at start-up the most threads
+per threadgroup each kernel allows (below 1024 would mean its register use limits the GPU's parallelism).
+
+Instruments' Metal System Trace shows the GPU timeline. Every VPIC command buffer is labelled with its kernel
+(`vpic push`, `vpic sort scatter` and so on):
+
+```sh
+xcrun xctrace record --template 'Metal System Trace' --output run.trace --env OMP_PROC_BIND=spread \
+    --env OMP_PLACES=threads --launch -- ./my_problem.deck.Darwin --tpp 4
+```
+
+Run the deck directly, without `mpirun`, so that Instruments can follow it. Tracing slows the run somewhat, so take
+timings from runs without it.
 
 ## Known limits
 
