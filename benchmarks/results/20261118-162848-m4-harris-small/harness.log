@@ -1,0 +1,19 @@
+build cpu: compiling harris_bench.deck
+build metal: compiling harris_bench.deck
+2d-small     cpu            8x1   warmup0  steady    95.66 ms/step  wall   101.90 ms/step  push 0.370 /ns
+2d-small     metal          1x4   warmup0  steady    53.69 ms/step  wall    58.38 ms/step  push 0.831 /ns
+2d-small     cpu            8x1   measure0 steady    95.45 ms/step  wall    98.62 ms/step  push 0.367 /ns
+2d-small     metal          1x4   measure0 steady    53.33 ms/step  wall    56.71 ms/step  push 0.837 /ns
+2d-small     metal          1x4   measure1 steady    53.83 ms/step  wall    56.18 ms/step  push 0.830 /ns
+2d-small     cpu            8x1   measure1 steady    94.48 ms/step  wall    98.19 ms/step  push 0.358 /ns
+2d-small     cpu            8x1   measure2 steady    98.25 ms/step  wall   100.00 ms/step  push 0.360 /ns
+2d-small     metal          1x4   measure2 steady    56.38 ms/step  wall    58.57 ms/step  push 0.836 /ns
+3d-small     cpu            8x1   warmup0  steady    62.58 ms/step  wall    65.26 ms/step  push 0.365 /ns
+3d-small     metal          1x4   warmup0  steady    29.56 ms/step  wall    36.03 ms/step  push 0.780 /ns
+3d-small     cpu            8x1   measure0 steady    60.56 ms/step  wall    63.98 ms/step  push 0.366 /ns
+3d-small     metal          1x4   measure0 steady    30.60 ms/step  wall    36.16 ms/step  push 0.774 /ns
+3d-small     metal          1x4   measure1 steady    29.53 ms/step  wall    35.84 ms/step  push 0.781 /ns
+3d-small     cpu            8x1   measure1 steady    63.48 ms/step  wall    65.05 ms/step  push 0.358 /ns
+3d-small     cpu            8x1   measure2 steady    63.02 ms/step  wall    65.32 ms/step  push 0.350 /ns
+3d-small     metal          1x4   measure2 steady    29.67 ms/step  wall    35.88 ms/step  push 0.778 /ns
+results: benchmarks/results/20261118-162848-m4-harris-small
