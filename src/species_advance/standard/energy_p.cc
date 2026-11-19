@@ -1,5 +1,9 @@
 #define IN_spa
 #define HAS_V4_PIPELINE
+#ifdef VPIC_ENABLE_METAL
+#include "../../metal/metal_push.h"
+#include <cmath>
+#endif
 #include "spa_private.h"
 
 #ifdef USE_LEGACY_PARTICLE_ARRAY
@@ -220,8 +224,37 @@ energy_p_kokkos(const species_t* RESTRICT sp,
 
     float qdt_2mc = (sp->q*sp->g->dt)/(2*sp->m*sp->g->cvac);
 
-    local = energy_p_kernel(ia->k_i_d, sp->k_p_d, sp->k_p_i_d, qdt_2mc, sp->m, sp->np);
-    Kokkos::fence();
+#ifdef VPIC_ENABLE_METAL
+    if( vpic_metal_particle_loops_enabled() ) {
+      if( sp->k_p_d.stride(0)!=1 || ia->k_i_d.stride(0)!=INTERPOLATOR_VAR_COUNT )
+        ERROR(( "Unexpected array layout for the Metal energy sum" ));
+      vpic_metal_energy_args a;
+      a.particles         = sp->k_p_d.data();
+      a.particle_stride   = sp->k_p_d.stride(1);
+      a.particle_capacity = sp->k_p_d.extent(0);
+      a.particles_i       = sp->k_p_i_d.data();
+      a.np                = sp->np;
+      a.interpolators     = ia->k_i_d.data();
+      a.nvoxels           = ia->k_i_d.extent(0);
+      a.qdt_2mc           = qdt_2mc;
+      a.msp               = sp->m;
+      local = vpic_metal_energy_p( a );
+      // VPIC_METAL_PARTICLE_LOOPS_CHECK: compare with the CPU sum, keep the CPU value
+      if( vpic_metal_particle_loops_check_enabled() ) {
+        const double cpu = energy_p_kernel(ia->k_i_d, sp->k_p_d, sp->k_p_i_d, qdt_2mc, sp->m, sp->np);
+        Kokkos::fence();
+        const double rel = cpu!=0 ? std::fabs(local-cpu)/std::fabs(cpu) : std::fabs(local);
+        MESSAGE(( "Metal energy check (%s, %zu particles): GPU %.9g, CPU %.9g, relative difference %.3g",
+                  sp->name, size_t(sp->np), local, cpu, rel ));
+        if( rel>1e-5 ) ERROR(( "Metal energy sum differs from the CPU sum" ));
+        local = cpu;
+      }
+    } else
+#endif
+    {
+      local = energy_p_kernel(ia->k_i_d, sp->k_p_d, sp->k_p_i_d, qdt_2mc, sp->m, sp->np);
+      Kokkos::fence();
+    }
 
     mp_allsum_d( &local, &global, 1 );
     return global*(static_cast<double>(sp->g->cvac) * static_cast<double>(sp->g->cvac));

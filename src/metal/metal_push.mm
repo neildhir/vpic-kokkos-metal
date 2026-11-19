@@ -32,6 +32,19 @@ struct vpic_metal_sort_params {
   uint64_t np, stride, first;
 };
 
+// Must match RhoParams and EnergyParams in particle_loops.metal
+struct vpic_metal_rho_params {
+  uint64_t np, stride, first;
+  float    q_8V;
+  int32_t  sy, sz, pad;
+};
+static_assert(sizeof(vpic_metal_rho_params) == 40, "RhoParams layout changed");
+struct vpic_metal_energy_params {
+  uint64_t np, stride, first;
+  float    qdt_2mc, msp;
+};
+static_assert(sizeof(vpic_metal_energy_params) == 32, "EnergyParams layout changed");
+
 [[noreturn]] void fail(const std::string& why) {
   fprintf(stderr, "VPIC Metal push: %s\n", why.c_str());
   fflush(stderr);
@@ -75,6 +88,12 @@ struct Context {
   std::vector<id<MTLBuffer>> scan_sums;   // block sums, one buffer per scan level
   double   sort_gpu_seconds = 0;
   uint64_t sort_calls = 0;
+
+  // Periodic particle loops (charge deposit, energies)
+  id<MTLComputePipelineState> rho = nil, energy = nil;
+  id<MTLBuffer> energy_partial = nil;   // one float per SIMD group, read on the host
+  double   loops_gpu_seconds = 0;
+  uint64_t rho_calls = 0, energy_calls = 0;
 };
 
 // Grow a scratch buffer to at least bytes (contents are not kept)
@@ -137,6 +156,8 @@ Context& context() {
     c.scan_blocks = pipeline(c.device, library, @"scan_blocks");
     c.scan_add = pipeline(c.device, library, @"scan_add");
     c.sort_scatter = pipeline(c.device, library, @"sort_scatter");
+    c.rho = pipeline(c.device, library, @"accumulate_rho_p");
+    c.energy = pipeline(c.device, library, @"energy_p");
     // The scan kernels assume 32-wide SIMD groups and full threadgroups
     if (c.scan_blocks.threadExecutionWidth != 32)
       fail("the scan kernels need 32-wide SIMD groups; this GPU has " +
@@ -172,6 +193,9 @@ Context& context() {
         if (c.sort_calls)
           fprintf(stderr, "[vpic-metal] sort totals: %llu calls, %.3f s GPU\n",
                   (unsigned long long)c.sort_calls, c.sort_gpu_seconds);
+        if (c.rho_calls + c.energy_calls)
+          fprintf(stderr, "[vpic-metal] rho and energy totals: %llu + %llu calls, %.3f s GPU\n",
+                  (unsigned long long)c.rho_calls, (unsigned long long)c.energy_calls, c.loops_gpu_seconds);
       });
     }
     return c;
@@ -203,6 +227,36 @@ Wrapped wrap(Context& c, const void* data, size_t bytes, const char* what) {
   Wrapped w{buffer, NSUInteger(uintptr_t(data) - lo)};
   c.wrapped.emplace(key, w);
   return w;
+}
+
+// Run a particle loop over np particles in command buffers of at most
+// c.chunk particles (rounded down to whole SIMD groups), wait for them, and
+// return the GPU time. bind(encoder, first particle, particles) sets the
+// pipeline's arguments for one chunk.
+template <class Bind>
+double particle_loop(Context& c, id<MTLComputePipelineState> pso, size_t np, const char* what, Bind bind) {
+  const size_t chunk = std::max<size_t>(32, c.chunk / 32 * 32);
+  NSMutableArray<id<MTLCommandBuffer>>* all = [NSMutableArray array];
+  for (size_t first = 0; first < np; first += chunk) {
+    const size_t n = std::min(chunk, np - first);
+    id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:pso];
+    bind(enc, first, n);
+    [enc dispatchThreads:MTLSizeMake(n, 1, 1) threadsPerThreadgroup:MTLSizeMake(c.threads, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [all addObject:cb];
+  }
+  [all.lastObject waitUntilCompleted];
+  double gpu = 0;
+  for (id<MTLCommandBuffer> cb in all) {
+    if (cb.status != MTLCommandBufferStatusCompleted)
+      fail(std::string("a ") + what + " command buffer failed: " +
+           (cb.error ? cb.error.localizedDescription.UTF8String : "unknown error"));
+    gpu += cb.GPUEndTime - cb.GPUStartTime;
+  }
+  return gpu;
 }
 
 }  // namespace
@@ -420,5 +474,66 @@ void vpic_metal_sort_particles(const vpic_metal_sort_args& a) {
     if (c.profile)
       fprintf(stderr, "[vpic-metal] sort %zu particles over %zu cells: %.3f ms GPU (%zu scan levels)\n", a.np,
               a.ncells, 1e3 * gpu, level_n.size());
+  }
+}
+
+bool vpic_metal_particle_loops_enabled() { return env_flag("VPIC_METAL_PARTICLE_LOOPS", true); }
+
+bool vpic_metal_particle_loops_check_enabled() { return env_flag("VPIC_METAL_PARTICLE_LOOPS_CHECK", false); }
+
+void vpic_metal_accumulate_rho_p(const vpic_metal_rho_args& a) {
+  if (a.np == 0) return;
+  @autoreleasepool {
+    Context& c = context();
+    const Wrapped p = wrap(c, a.particles, a.particle_stride * 7 * sizeof(float), "the particles");
+    const Wrapped cells = wrap(c, a.particles_i, a.particle_capacity * sizeof(int), "the particle cells");
+    const Wrapped f = wrap(c, a.fields, a.nvoxels * 16 * sizeof(float), "the fields");
+    const double gpu = particle_loop(c, c.rho, a.np, "charge deposit",
+                                     [&](id<MTLComputeCommandEncoder> enc, size_t first, size_t) {
+      const vpic_metal_rho_params R{a.np, a.particle_stride, first, a.q_8V, a.sy, a.sz, 0};
+      [enc setBuffer:p.buffer offset:p.offset atIndex:0];
+      [enc setBuffer:cells.buffer offset:cells.offset atIndex:1];
+      [enc setBuffer:f.buffer offset:f.offset atIndex:2];
+      [enc setBytes:&R length:sizeof(R) atIndex:3];
+    });
+    c.loops_gpu_seconds += gpu;
+    c.rho_calls += 1;
+    if (c.profile)
+      fprintf(stderr, "[vpic-metal] charge deposit %zu particles: %.3f ms GPU, %.3f ns/particle\n", a.np, 1e3 * gpu,
+              1e9 * gpu / double(a.np));
+  }
+}
+
+double vpic_metal_energy_p(const vpic_metal_energy_args& a) {
+  if (a.np == 0) return 0;
+  @autoreleasepool {
+    Context& c = context();
+    const Wrapped p = wrap(c, a.particles, a.particle_stride * 7 * sizeof(float), "the particles");
+    const Wrapped cells = wrap(c, a.particles_i, a.particle_capacity * sizeof(int), "the particle cells");
+    const Wrapped ia = wrap(c, a.interpolators, a.nvoxels * 18 * sizeof(float), "the interpolators");
+    // One partial sum per SIMD group; chunks are whole SIMD groups, so a
+    // chunk starting at particle first writes from partial first/32 on
+    const size_t groups = (a.np + 31) / 32;
+    if (c.energy_partial == nil || c.energy_partial.length < groups * sizeof(float)) {
+      c.energy_partial = [c.device newBufferWithLength:groups * sizeof(float) options:MTLResourceStorageModeShared];
+      if (c.energy_partial == nil) fail("could not allocate the energy partial sums");
+    }
+    const double gpu = particle_loop(c, c.energy, a.np, "energy",
+                                     [&](id<MTLComputeCommandEncoder> enc, size_t first, size_t) {
+      const vpic_metal_energy_params E{a.np, a.particle_stride, first, a.qdt_2mc, a.msp};
+      [enc setBuffer:p.buffer offset:p.offset atIndex:0];
+      [enc setBuffer:cells.buffer offset:cells.offset atIndex:1];
+      [enc setBuffer:ia.buffer offset:ia.offset atIndex:2];
+      [enc setBuffer:c.energy_partial offset:first / 32 * sizeof(float) atIndex:3];
+      [enc setBytes:&E length:sizeof(E) atIndex:4];
+    });
+    const float* partial = static_cast<const float*>(c.energy_partial.contents);
+    double en = 0;
+    for (size_t k = 0; k < groups; ++k) en += double(partial[k]);
+    c.loops_gpu_seconds += gpu;
+    c.energy_calls += 1;
+    if (c.profile)
+      fprintf(stderr, "[vpic-metal] energy %zu particles: %.3f ms GPU\n", a.np, 1e3 * gpu);
+    return en;
   }
 }

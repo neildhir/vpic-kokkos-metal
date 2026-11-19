@@ -15,6 +15,12 @@
 
 
 #include "../../vpic/kokkos_helpers.h"
+#ifdef VPIC_ENABLE_METAL
+#include "../../metal/metal_push.h"
+#include <algorithm>
+#include <cmath>
+#include <vector>
+#endif
 
 #ifdef USE_LEGACY_PARTICLE_ARRAY
 // accumulate_rho_p adds the charge density associated with the
@@ -448,11 +454,10 @@ struct accum_rhob {
     }
 };
 
-void
-k_accumulate_rho_p( /**/  field_array_t * RESTRICT fa,
-                  const species_t     * RESTRICT sp )
+static void
+k_accumulate_rho_p_cpu( /**/  field_array_t * RESTRICT fa,
+                        const species_t     * RESTRICT sp )
 {
-  if( !fa || !sp || fa->g!=sp->g ) ERROR(( "Bad args" ));
 
     k_field_t kfield = fa->k_f_d;
     k_particles_t kparticles = sp->k_p_d;
@@ -499,6 +504,70 @@ k_accumulate_rho_p( /**/  field_array_t * RESTRICT fa,
 
     });
     Kokkos::Experimental::contribute(kfield, scatter_view);
+}
+
+#ifdef VPIC_ENABLE_METAL
+static void
+k_accumulate_rho_p_metal( /**/  field_array_t * RESTRICT fa,
+                          const species_t     * RESTRICT sp )
+{
+  if( sp->k_p_d.stride(0)!=1 || fa->k_f_d.stride(0)!=FIELD_VAR_COUNT )
+    ERROR(( "Unexpected array layout for the Metal charge deposit" ));
+  vpic_metal_rho_args a;
+  a.particles         = sp->k_p_d.data();
+  a.particle_stride   = sp->k_p_d.stride(1);
+  a.particle_capacity = sp->k_p_d.extent(0);
+  a.particles_i       = sp->k_p_i_d.data();
+  a.np                = sp->np;
+  a.fields            = fa->k_f_d.data();
+  a.nvoxels           = fa->k_f_d.extent(0);
+  a.q_8V              = (sp->q)*(sp->g->r8V);
+  a.sy                = sp->g->sy;
+  a.sz                = sp->g->sz;
+  vpic_metal_accumulate_rho_p( a );
+}
+
+// VPIC_METAL_PARTICLE_LOOPS_CHECK: run the GPU deposit and the CPU deposit
+// from the same rhof, report the largest difference relative to the largest
+// deposited value, and keep the CPU result.
+static void
+k_accumulate_rho_p_checked( /**/  field_array_t * RESTRICT fa,
+                            const species_t     * RESTRICT sp )
+{
+  k_field_t& f = fa->k_f_d;
+  const size_t nv = f.extent(0);
+  std::vector<float> before( nv ), gpu( nv );
+  for( size_t v=0; v<nv; v++ ) before[v] = f(v, field_var::rhof);
+  k_accumulate_rho_p_metal( fa, sp );
+  for( size_t v=0; v<nv; v++ ) { gpu[v] = f(v, field_var::rhof); f(v, field_var::rhof) = before[v]; }
+  k_accumulate_rho_p_cpu( fa, sp );
+  Kokkos::fence();
+  double max_diff = 0, max_dep = 0;
+  for( size_t v=0; v<nv; v++ ) {
+    const double cpu = f(v, field_var::rhof);
+    max_diff = std::max( max_diff, std::fabs( double(gpu[v]) - cpu ) );
+    max_dep  = std::max( max_dep,  std::fabs( cpu - double(before[v]) ) );
+  }
+  const double rel = max_dep>0 ? max_diff/max_dep : max_diff;
+  MESSAGE(( "Metal charge deposit check (%s, %zu particles): max |GPU-CPU| = %.3g, "
+            "%.3g of the largest deposit", sp->name, size_t(sp->np), max_diff, rel ));
+  if( rel>1e-4 ) ERROR(( "Metal charge deposit differs from the CPU deposit" ));
+}
+#endif
+
+void
+k_accumulate_rho_p( /**/  field_array_t * RESTRICT fa,
+                  const species_t     * RESTRICT sp )
+{
+  if( !fa || !sp || fa->g!=sp->g ) ERROR(( "Bad args" ));
+#ifdef VPIC_ENABLE_METAL
+  if( vpic_metal_particle_loops_enabled() ) {
+    if( vpic_metal_particle_loops_check_enabled() ) k_accumulate_rho_p_checked( fa, sp );
+    else                                            k_accumulate_rho_p_metal( fa, sp );
+    return;
+  }
+#endif
+  k_accumulate_rho_p_cpu( fa, sp );
 }
 
 void 

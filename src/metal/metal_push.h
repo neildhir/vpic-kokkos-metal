@@ -72,4 +72,45 @@ bool vpic_metal_sort_check_enabled();
 // Sort the particles. Aborts the run on failure.
 void vpic_metal_sort_particles(const vpic_metal_sort_args& args);
 
+// Periodic particle loops on the GPU: the charge deposit of divergence
+// cleaning and the kinetic energy of the energies dump. Both follow their CPU
+// loops (k_accumulate_rho_p, energy_p_kernel) statement for statement.
+struct vpic_metal_rho_args {
+  const float* particles;          // particle (i, var) at particles[var*stride + i]
+  size_t       particle_stride;
+  size_t       particle_capacity;  // rows allocated
+  const int*   particles_i;
+  size_t       np;
+  float*       fields;             // 16 floats per voxel; rhof is added to
+  size_t       nvoxels;
+  float        q_8V;               // species charge / (8 cell volumes)
+  int          sy, sz;             // voxel strides
+};
+
+struct vpic_metal_energy_args {
+  const float* particles;
+  size_t       particle_stride;
+  size_t       particle_capacity;
+  const int*   particles_i;
+  size_t       np;
+  const float* interpolators;      // 18 floats per voxel
+  size_t       nvoxels;
+  float        qdt_2mc, msp;
+};
+
+// True unless VPIC_METAL_PARTICLE_LOOPS=0, which runs both loops on the CPU.
+bool vpic_metal_particle_loops_enabled();
+
+// True if VPIC_METAL_PARTICLE_LOOPS_CHECK=1: compare each GPU loop with the
+// CPU loop from the same state (slow; for validation).
+bool vpic_metal_particle_loops_check_enabled();
+
+// Add the species' charge density to rhof. Aborts the run on failure.
+void vpic_metal_accumulate_rho_p(const vpic_metal_rho_args& args);
+
+// The species' kinetic energy, as energy_p_kernel returns it (local to this
+// rank, in units of c^2; the caller does the MPI sum). Summed per SIMD group
+// in float, then in double on the host. Aborts the run on failure.
+double vpic_metal_energy_p(const vpic_metal_energy_args& args);
+
 #endif // _vpic_metal_push_h_
