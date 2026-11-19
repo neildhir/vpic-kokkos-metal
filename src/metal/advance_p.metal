@@ -110,6 +110,8 @@ inline void scatter_currents(device atomic_float* f, int ii, thread const EdgeCu
 //   VPIC_EXP_SKIP_MOVE_DEPOSIT    no current from move_p (cell crossers)
 //   VPIC_EXP_MOVE_PLAIN_ADD       move_p adds current without atomics (racy)
 //   VPIC_EXP_COUNT_CROSSERS       count particles that leave their cell (counters[3])
+//   VPIC_EXP_NO_FOLD              crossers' first streak deposited by move_p, not the reduction
+//   VPIC_EXP_SERIAL_ATOMICS       one lane adds a cell's 12 edge currents (previous scheme)
 inline void scatter_move_currents(device atomic_float* f, int ii, thread const EdgeCurrents& e,
                                   constant PushParams& P) {
 #if defined(VPIC_EXP_SKIP_MOVE_DEPOSIT)
@@ -132,51 +134,54 @@ inline void scatter_move_currents(device atomic_float* f, int ii, thread const E
 #endif
 }
 
-// Move a particle that leaves its cell, streak by streak, depositing current
-// along the way (move_p_kokkos). Returns true if the particle hit a boundary
-// this rank cannot handle and must go on the mover list; disp then holds the
-// remaining displacement.
-inline bool move_p(device float* p, device int* pidx, ulong i,
-                   thread float3& disp, device atomic_float* f,
-                   device const long* neighbors, device atomic_uint* counters,
-                   constant PushParams& P) {
+// One streak of a particle's track inside its current cell: the body of
+// move_p_kokkos's loop up to the deposit, statement for statement. Returns the
+// streak's edge currents, advances pos and disp, and sets axis (3: the track
+// ends in this cell) and dir (the face direction along axis, if axis < 3).
+inline EdgeCurrents streak(thread float3& pos, thread float3& disp, float q,
+                           thread int& axis, thread float& dir, constant PushParams& P) {
+  float3 s_mid  = pos;
+  float3 s_disp = disp;
+  const float3 s_dir = select(float3(-1.0f), float3(1.0f), s_disp > 0.0f);
+
+  // Twice the fractional distance to each potential face intersection
+  const float v0 = (s_disp.x == 0) ? 3.4e38f : (s_dir.x - s_mid.x) / s_disp.x;
+  const float v1 = (s_disp.y == 0) ? 3.4e38f : (s_dir.y - s_mid.y) / s_disp.y;
+  const float v2 = (s_disp.z == 0) ? 3.4e38f : (s_dir.z - s_mid.z) / s_disp.z;
+
+  // Fractional length and axis of this streak (axis 3: end of the track)
+  float v3 = 2;
+  axis = 3;
+  if (v0 < v3) { v3 = v0; axis = 0; }
+  if (v1 < v3) { v3 = v1; axis = 1; }
+  if (v2 < v3) { v3 = v2; axis = 2; }
+  v3 *= 0.5f;
+
+  s_disp *= v3;
+  s_mid  += s_disp;
+  const float v5 = q * s_disp.x * s_disp.y * s_disp.z * (1.f / 3.f);
+  const EdgeCurrents e = edge_currents(s_mid, s_disp, q, v5, P);
+
+  disp -= s_disp;                 // Remaining displacement
+  pos  += s_disp + s_disp;        // New particle offset
+  dir = axis < 3 ? s_dir[axis] : 0.0f;
+  return e;
+}
+
+// Continue a cell crosser's move (move_p_kokkos) after a streak in cell ii
+// that ended on a face (axis < 3) or at the end of the track (axis 3): cross
+// into the next cell and move streak by streak, depositing current, until the
+// track ends. Returns true if the particle hit a boundary this rank cannot
+// handle and must go on the mover list; disp then holds the remaining
+// displacement. q is the particle's charge weight (qsp * w).
+inline bool move_p_continue(device float* p, device int* pidx, ulong i, float q,
+                            thread float3& pos, thread float3& disp, int ii, int axis, float dir,
+                            device atomic_float* f, device const long* neighbors,
+                            device atomic_uint* counters, constant PushParams& P) {
   const ulong s = P.stride;
-  const float q = P.qsp * p[PW * s + i];
-  float3 pos = float3(p[PDX * s + i], p[PDY * s + i], p[PDZ * s + i]);
-  int ii = pidx[i];
   bool keep = false;
-
-  for (;;) {
-    float3 s_mid  = pos;
-    float3 s_disp = disp;
-    const float3 s_dir = select(float3(-1.0f), float3(1.0f), s_disp > 0.0f);
-
-    // Twice the fractional distance to each potential face intersection
-    const float v0 = (s_disp.x == 0) ? 3.4e38f : (s_dir.x - s_mid.x) / s_disp.x;
-    const float v1 = (s_disp.y == 0) ? 3.4e38f : (s_dir.y - s_mid.y) / s_disp.y;
-    const float v2 = (s_disp.z == 0) ? 3.4e38f : (s_dir.z - s_mid.z) / s_disp.z;
-
-    // Fractional length and axis of this streak (axis 3: end of the track)
-    float v3 = 2;
-    int axis = 3;
-    if (v0 < v3) { v3 = v0; axis = 0; }
-    if (v1 < v3) { v3 = v1; axis = 1; }
-    if (v2 < v3) { v3 = v2; axis = 2; }
-    v3 *= 0.5f;
-
-    s_disp *= v3;
-    s_mid  += s_disp;
-    const float v5 = q * s_disp.x * s_disp.y * s_disp.z * (1.f / 3.f);
-    const EdgeCurrents e = edge_currents(s_mid, s_disp, q, v5, P);
-    scatter_move_currents(f, ii, e, P);
-
-    disp -= s_disp;                 // Remaining displacement
-    pos  += s_disp + s_disp;        // New particle offset
-
-    if (axis == 3) break;
-
+  while (axis < 3) {
     // Put the particle exactly on the face it reached
-    const float dir = s_dir[axis];
     pos[axis] = dir;
     const int face = axis + (dir > 0 ? 3 : 0);
     if (!P.has_neighbors) {
@@ -191,19 +196,19 @@ inline bool move_p(device float* p, device int* pidx, ulong i,
       // Reflect the momentum and the remaining displacement, keep moving
       p[(PUX + ulong(axis)) * s + i] = -p[(PUX + ulong(axis)) * s + i];
       disp[axis] = -disp[axis];
-      continue;
-    }
-
-    if (neighbor < P.rangel || neighbor > P.rangeh) {
+    } else if (neighbor < P.rangel || neighbor > P.rangeh) {
       // A boundary this rank cannot handle: record the face hit
       ii = 8 * ii + face;
       keep = true;
       break;
+    } else {
+      // Crossed into a local voxel: change coordinates and keep moving
+      ii = int(neighbor - P.rangel);
+      pos[axis] = -dir;
     }
 
-    // Crossed into a local voxel: change coordinates and keep moving
-    ii = int(neighbor - P.rangel);
-    pos[axis] = -dir;
+    const EdgeCurrents e = streak(pos, disp, q, axis, dir, P);
+    scatter_move_currents(f, ii, e, P);
   }
 
   p[PDX * s + i] = pos.x;
@@ -213,19 +218,66 @@ inline bool move_p(device float* p, device int* pidx, ulong i,
   return keep;
 }
 
-// Add the in-cell currents of a SIMD group's particles. Particles are sorted
-// by cell, so a group's lanes span only a few cells: cell by cell, sum the
-// currents of the lanes in that cell and let one lane add the sums, 12 atomics
-// per cell instead of 12 per particle. After MAX_CELL_PASSES cells (unsorted
-// particles) the remaining lanes add directly.
+// The whole move of a cell crosser, from its first streak (used by the
+// VPIC_EXP_NO_FOLD experiment; normally the first streak goes into the
+// in-cell reduction and the kernel calls move_p_continue).
+inline bool move_p(device float* p, device int* pidx, ulong i,
+                   thread float3& disp, device atomic_float* f,
+                   device const long* neighbors, device atomic_uint* counters,
+                   constant PushParams& P) {
+  const ulong s = P.stride;
+  const float q = P.qsp * p[PW * s + i];
+  float3 pos = float3(p[PDX * s + i], p[PDY * s + i], p[PDZ * s + i]);
+  const int ii = pidx[i];
+  int axis;
+  float dir;
+  const EdgeCurrents e = streak(pos, disp, q, axis, dir, P);
+  scatter_move_currents(f, ii, e, P);
+  return move_p_continue(p, pidx, i, q, pos, disp, ii, axis, dir, f, neighbors, counters, P);
+}
+
+// Add one of a cell's 12 edge currents (index k in EdgeCurrents order) to
+// the field array. In VPIC's voxel numbering the neighbours used by
+// scatter_currents are fixed offsets: +1 in x, +(nx+2) in y, +(nx+2)(ny+2) in z.
+inline void add_edge_current(device atomic_float* f, int ii, int k, float value,
+                             constant PushParams& P) {
+  const int sy = P.nx + 2, sz = (P.nx + 2) * (P.ny + 2);
+  int off;
+  switch (k) {   // jx: ii, ay, az, ayz; jy: ii, az, ax, azx; jz: ii, ax, ay, axy
+    case 1:  off = sy;      break;
+    case 2:  off = sz;      break;
+    case 3:  off = sy + sz; break;
+    case 5:  off = sz;      break;
+    case 6:  off = 1;       break;
+    case 7:  off = sz + 1;  break;
+    case 9:  off = 1;       break;
+    case 10: off = sy;      break;
+    case 11: off = sy + 1;  break;
+    default: off = 0;       break;   // 0, 4, 8: the cell itself
+  }
+  add_current(f, ii + off, JFX + ulong(k / 4), value);
+}
+
+// Add the currents of the streaks that lie in each lane's own cell: in-cell
+// particles, and the first streak of cell crossers. Particles are sorted by
+// cell, so a SIMD group's lanes span only a few cells: cell by cell, sum the
+// lanes' currents with simd_sum, which leaves the sums in every lane, and let
+// lanes 0-11 add one edge each (lanes cover several edges in a short group).
+// That is 12 atomics per cell instead of 12 per particle, issued as one SIMD
+// instruction rather than 12 in a row from one lane. On an M4 the in-cell
+// atomics are still about half the push time; issuing them in parallel saved
+// 9-12% of it, and folding crossers' first streaks in another 1-2%. After
+// MAX_CELL_PASSES cells (unsorted particles) the remaining lanes add directly.
 //
 // Every lane of the SIMD group must call this (uniform control flow), with
-// take_part false for lanes that have nothing to add. SIMD-group reductions
+// take_part false for lanes that have nothing to add. SIMD-group operations
 // inside divergent branches or loops are not reliable: the compiler may
 // evaluate them over the whole group.
 inline void deposit_in_cell(device atomic_float* f, int ii, thread const EdgeCurrents& e,
                             bool take_part, ushort lane, constant PushParams& P) {
   constexpr int MAX_CELL_PASSES = 4;
+  // Lanes 0..active-1 run: a grid's last SIMD group may have fewer than 12
+  const ushort active = ushort(simd_sum(1u));
   bool done = !take_part;
   for (int pass = 0; pass < MAX_CELL_PASSES; ++pass) {
     if (simd_all(done)) return;
@@ -233,8 +285,17 @@ inline void deposit_in_cell(device atomic_float* f, int ii, thread const EdgeCur
     const bool mine = !done && ii == cell;
     EdgeCurrents sum;
     for (int k = 0; k < 12; ++k) sum.j[k] = simd_sum(mine ? e.j[k] : 0.0f);
+#if defined(VPIC_EXP_SERIAL_ATOMICS)
+    // Previous scheme, for A/B experiments: one lane adds all 12 edges
     const ushort first = simd_min(mine ? lane : ushort(0xffff));
     if (lane == first) scatter_currents(f, cell, sum, P);
+#else
+    for (ushort k = lane; k < 12; k += active) {   // one pass when active >= 12
+      float v = sum.j[0];
+      for (ushort m = 1; m < 12; ++m) v = (k == m) ? sum.j[m] : v;
+      add_edge_current(f, cell, k, v, P);
+    }
+#endif
     done = done || mine;
   }
   if (!done) scatter_currents(f, ii, e, P);
@@ -260,7 +321,12 @@ kernel void advance_p(device float*         p         [[buffer(0)]],
   // No early returns before deposit_in_cell: every lane must reach it
   const bool valid = i < P.np;
   bool inbnds = false;
+  bool folded = false;   // a crosser whose first streak is in e
   int ii = 0;
+  float3 pos_move = float3(0.0f);
+  float q_move = 0.0f;
+  int axis_move = 3;
+  float dir_move = 0.0f;
   EdgeCurrents e;
   for (int k = 0; k < 12; ++k) e.j[k] = 0.0f;
   float3 disp = float3(0.0f);
@@ -333,13 +399,21 @@ kernel void advance_p(device float*         p         [[buffer(0)]],
       e = edge_currents(float3(v0, v1, v2), float3(ux, uy, uz), q, v5, P);
     } else {
       disp = float3(ux, uy, uz);
+#if !defined(VPIC_EXP_NO_FOLD)
+      // A cell crosser's first streak lies in its own cell: add it with the
+      // in-cell currents, and continue the move from there below
+      pos_move = float3(dx, dy, dz);
+      q_move = P.qsp * q;           // q is still the weight here
+      e = streak(pos_move, disp, q_move, axis_move, dir_move, P);
+      folded = true;
+#endif
     }
   }
 
 #if defined(VPIC_EXP_SKIP_INCELL_DEPOSIT)
   deposit_in_cell(f, ii, e, false, lane, P);
 #else
-  deposit_in_cell(f, ii, e, valid && inbnds, lane, P);
+  deposit_in_cell(f, ii, e, valid && (inbnds || folded), lane, P);
 #endif
 #if defined(VPIC_EXP_COUNT_CROSSERS)
   {
@@ -350,7 +424,12 @@ kernel void advance_p(device float*         p         [[buffer(0)]],
   if (!valid || inbnds) return;
 
   // The particle leaves its cell
+#if defined(VPIC_EXP_NO_FOLD)
   if (!move_p(p, pidx, i, disp, f, neighbors, counters, P)) return;
+#else
+  if (!move_p_continue(p, pidx, i, q_move, pos_move, disp, ii, axis_move, dir_move, f, neighbors,
+                       counters, P)) return;
+#endif
 
   // Mover list. A full list sets the overflow flag; the host aborts.
   if (atomic_load_explicit(&counters[0], memory_order_relaxed) >= P.max_nm) {
