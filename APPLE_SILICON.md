@@ -21,14 +21,19 @@ directly on the same memory, since Apple Silicon shares memory between CPU and G
 
 ## Requirements
 
-- **A Mac with an M1 chip or newer.** Any M-series chip works: base, Pro, Max or Ultra.
-- **macOS 15 or newer.** Tested on macOS 27.2.
+- **A Mac with an M1 chip or newer.** The GPU code needs float atomics, which Apple GPUs have from the M1
+  generation on (Metal GPU family Apple7); the code checks this at start-up.
+- **macOS 15 or newer.** The GPU code sets Metal compiler options that macOS 15 introduced.
 - **Xcode command line tools.** Install them with `xcode-select --install`.
 - **Homebrew packages:** CMake, Open MPI and the OpenMP runtime.
 
 ```sh
 brew install cmake open-mpi libomp
 ```
+
+So far this has been tested on one machine only: a MacBook Pro with a base M4 chip, on macOS 27.2. Other M-series
+chips and macOS versions should work, but have not been tried. If you run it on another Mac, the `ctest` result and
+the benchmark numbers would be very welcome.
 
 ## Build
 
