@@ -461,18 +461,21 @@ void vacuum_advance_e_interior_kokkos(k_field_t& k_field,
 void vacuum_advance_e_exterior_kokkos(k_field_t& k_field,
                                 const size_t nx, const size_t ny, const size_t nz,
                                 const float px_muy, const float px_muz, const float py_mux, const float py_muz, const float pz_mux, const float pz_muy,
-                                const float damp, const float decayx, const float decayy, const float decayz, const float drivex, const float drivey, const float drivez, const float cj) {
+                                const float damp, const float decayx, const float decayy, const float decayz, const float drivex, const float drivey, const float drivez, const float cj,
+                                const bool z_planes_done = false) {
+  // z_planes_done: the z = 1 and z = nz+1 plane loops (ex loops 1-2, ey loops
+  // 3-4) were already run by vacuum_advance_e_2d_planes_kokkos
   // Do exterior ex
     Kokkos::MDRangePolicy<Kokkos::Rank<2>> ex_yx_policy({1, 1}, {ny+2, nx+1});
     Kokkos::MDRangePolicy<Kokkos::Rank<2>> ex_zx_policy({2, 1}, {nz+1, nx+1});
-    Kokkos::parallel_for("vacuum_advance_e: exterior ex loop 1", ex_yx_policy, KOKKOS_LAMBDA(const int y, const int x) {
+    if( !z_planes_done ) Kokkos::parallel_for("vacuum_advance_e: exterior ex loop 1", ex_yx_policy, KOKKOS_LAMBDA(const int y, const int x) {
         const size_t f0_idx = VOXEL(1, y,   1,nx,ny,nz) + (x-1);
         const size_t fx_idx = 0;
         const size_t fy_idx = VOXEL(1, y-1, 1,nx,ny,nz) + (x-1);
         const size_t fz_idx = VOXEL(1, y,   0,nx,ny,nz) + (x-1);
         update_ex(k_field, f0_idx, fx_idx, fy_idx, fz_idx, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayx, drivex, cj);
     });
-    Kokkos::parallel_for("vacuum_advance_e: exterior ex loop 2", ex_yx_policy, KOKKOS_LAMBDA(const int y, const int x) {
+    if( !z_planes_done ) Kokkos::parallel_for("vacuum_advance_e: exterior ex loop 2", ex_yx_policy, KOKKOS_LAMBDA(const int y, const int x) {
         const size_t f0_idx = VOXEL(1,y,  nz+1, nx,ny,nz) + (x-1);
         const size_t fx_idx = 0;
         const size_t fy_idx = VOXEL(1,y-1,nz+1, nx,ny,nz) + (x-1);
@@ -511,14 +514,14 @@ void vacuum_advance_e_exterior_kokkos(k_field_t& k_field,
             const size_t fz_idx = VOXEL(nx+1,y,z-1,nx,ny,nz);
             update_ey(k_field, f0_idx, fx_idx, fy_idx, fz_idx, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayy, drivey, cj);
     });
-    Kokkos::parallel_for("vacuum_advance_e: exterior ey loop 3", ey_yx_policy, KOKKOS_LAMBDA(const int y, const int x) {
+    if( !z_planes_done ) Kokkos::parallel_for("vacuum_advance_e: exterior ey loop 3", ey_yx_policy, KOKKOS_LAMBDA(const int y, const int x) {
             const size_t f0_idx = VOXEL(2,y,1,nx,ny,nz) + (x-2);
             const size_t fx_idx = VOXEL(1,y,1,nx,ny,nz) + (x-2);
             const size_t fy_idx = 0;
             const size_t fz_idx = VOXEL(2,y,0,nx,ny,nz) + (x-2);
             update_ey(k_field, f0_idx, fx_idx, fy_idx, fz_idx, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayy, drivey, cj);
     });
-    Kokkos::parallel_for("vacuum_advance_e: exterior ey loop 4", ey_yx_policy, KOKKOS_LAMBDA(const int y, const int x) {
+    if( !z_planes_done ) Kokkos::parallel_for("vacuum_advance_e: exterior ey loop 4", ey_yx_policy, KOKKOS_LAMBDA(const int y, const int x) {
             const size_t f0_idx = VOXEL(2,y,nz+1,nx,ny,nz) + (x-2);
             const size_t fx_idx = VOXEL(1,y,nz+1,nx,ny,nz) + (x-2);
             const size_t fy_idx = 0;
@@ -560,6 +563,33 @@ void vacuum_advance_e_exterior_kokkos(k_field_t& k_field,
 
 }
 
+// 2D (nz == 1): the 3D interior loop is empty, and the work would fall to
+// five separate passes over full y-x planes (left-over interior ez, exterior
+// ex loops 1-2 and ey loops 3-4). They update different components and read
+// only B, which advance_e does not change, so one pass over the z = 1 and
+// z = 2 planes does them all with the same arithmetic (bitwise identical).
+// Run after the tangential-B ghost exchange: ex and ey read the z = 0 ghosts.
+void vacuum_advance_e_2d_planes_kokkos(k_field_t& k_field,
+                                const size_t nx, const size_t ny, const size_t nz,
+                                const float px_muy, const float px_muz, const float py_mux, const float py_muz, const float pz_mux, const float pz_muy,
+                                const float damp, const float decayx, const float decayy, const float decayz, const float drivex, const float drivey, const float drivez, const float cj) {
+    Kokkos::MDRangePolicy<Kokkos::Rank<3>> zyx_policy({1, 1, 1}, {nz+2, ny+2, nx+1});
+    Kokkos::parallel_for("vacuum_advance_e: 2D z planes", zyx_policy, KOKKOS_LAMBDA(const int z, const int y, const int x) {
+        const size_t f0_idx = VOXEL(x,   y,   z,   nx, ny, nz);
+        const size_t fx_idx = VOXEL(x-1, y,   z,   nx, ny, nz);
+        const size_t fy_idx = VOXEL(x,   y-1, z,   nx, ny, nz);
+        const size_t fz_idx = VOXEL(x,   y,   z-1, nx, ny, nz);
+        // exterior ex loops 1-2: y in [1, ny+1], x in [1, nx]
+        update_ex(k_field, f0_idx, fx_idx, fy_idx, fz_idx, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayx, drivex, cj);
+        // exterior ey loops 3-4: y in [1, ny], x in [2, nx]
+        if( y<=int(ny) && x>=2 )
+          update_ey(k_field, f0_idx, fx_idx, fy_idx, fz_idx, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayy, drivey, cj);
+        // left-over interior ez: z = 1, y in [2, ny], x in [2, nx]
+        if( z==1 && y>=2 && y<=int(ny) && x>=2 )
+          update_ez(k_field, f0_idx, fx_idx, fy_idx, fz_idx, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayz, drivez, cj);
+    });
+}
+
 void
 vacuum_advance_e_kokkos( field_array_t * RESTRICT fa,
                   float frac ) {
@@ -595,7 +625,9 @@ vacuum_advance_e_kokkos( field_array_t * RESTRICT fa,
 
   local_ghost_tang_b( fa, fa->g );
 
-  vacuum_advance_e_interior_kokkos(k_field, nx, ny, nz, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayx, decayy, decayz, drivex, drivey, drivez, cj);
+  // In 2D the interior holds only ez, done with the z planes below
+  if( nz!=1 )
+    vacuum_advance_e_interior_kokkos(k_field, nx, ny, nz, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayx, decayy, decayz, drivex, drivey, drivez, cj);
 
   /***************************************************************************
    * Finish tangential B ghost setup
@@ -607,7 +639,10 @@ vacuum_advance_e_kokkos( field_array_t * RESTRICT fa,
    * Update exterior fields
    ***************************************************************************/
 
-  vacuum_advance_e_exterior_kokkos(k_field, nx, ny, nz, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayx, decayy, decayz, drivex, drivey, drivez, cj);
+  if( nz==1 )
+    vacuum_advance_e_2d_planes_kokkos(k_field, nx, ny, nz, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayx, decayy, decayz, drivex, drivey, drivez, cj);
+  vacuum_advance_e_exterior_kokkos(k_field, nx, ny, nz, px_muy, px_muz, py_mux, py_muz, pz_mux, pz_muy, damp, decayx, decayy, decayz, drivex, drivey, drivez, cj,
+                                   nz==1);
 
   local_adjust_tang_e( fa, fa->g );
 }
