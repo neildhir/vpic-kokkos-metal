@@ -5,6 +5,9 @@ Metal GPU build against the original OpenMP CPU build) on identical physics,
 and refuses to call a build fast if its physics differs. Any number of
 labelled build directories are treated alike; one of them is the reference.
 
+The latest results, with plots and an explanation of each benchmark, are in
+[report/README.md](report/README.md).
+
 Standard-library Python 3.11+ only (no NumPy, no YAML, no packaging). On a
 Mac whose `python3` is the system 3.9, use `python3.12` or
 `uv run --no-project --python 3.12 <script>`.
