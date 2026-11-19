@@ -216,6 +216,45 @@ total_particles = 12000000
 nstep = 40
 sort_interval = 0
 
+# Production-like LPI runs: the same particles and grids, sorted every 20
+# steps as VPIC runs normally are (the published method above sorts never).
+
+[cases.lpi-sorted-24]   # 13,824 grid points, particles sorted by cell every 20 steps
+deck = "lpi"
+nx = 24
+ny = 24
+nz = 24
+total_particles = 12000000
+nstep = 40
+sort_interval = 20
+
+[cases.lpi-sorted-44]   # 85,184 grid points, particles sorted by cell every 20 steps
+deck = "lpi"
+nx = 44
+ny = 44
+nz = 44
+total_particles = 12000000
+nstep = 40
+sort_interval = 20
+
+[cases.lpi-sorted-64]   # 262,144 grid points, particles sorted by cell every 20 steps
+deck = "lpi"
+nx = 64
+ny = 64
+nz = 64
+total_particles = 12000000
+nstep = 40
+sort_interval = 20
+
+[cases.lpi-sorted-128]   # 2,097,152 grid points, particles sorted by cell every 20 steps
+deck = "lpi"
+nx = 128
+ny = 128
+nz = 128
+total_particles = 12000000
+nstep = 40
+sort_interval = 20
+
 [presets]
 smoke = ["2d-smoke", "3d-smoke"]
 small = ["2d-small", "3d-small"]
@@ -223,6 +262,7 @@ medium = ["2d-medium", "3d-medium"]
 large = ["2d-large", "3d-large"]
 lpi-smoke = ["lpi-smoke-24", "lpi-smoke-64"]
 lpi-sweep = ["lpi-16", "lpi-24", "lpi-34", "lpi-44", "lpi-64", "lpi-96", "lpi-128"]
+lpi-sorted = ["lpi-sorted-24", "lpi-sorted-44", "lpi-sorted-64", "lpi-sorted-128"]
 
 # Published GPU push rates for the LPI sweep (pushes per ns; "text" = stated in
 # the paper's text, "figure" = read off Fig. 9 by eye). Not used by the

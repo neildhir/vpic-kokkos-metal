@@ -49,7 +49,12 @@ def _results(builds: list[str]) -> dict[str, Any]:
         "lpi-24": {"name": "lpi-24", "deck": "lpi", "nx": 24, "ny": 24, "nz": 24},
         "lpi-64": {"name": "lpi-64", "deck": "lpi", "nx": 64, "ny": 64, "nz": 64},
     }
-    timing = {"cpu": ("8x1", 100.0, 4.0), "metal": ("1x4", 50.0, 2.0), "third": ("1x1", 70.0, 3.0)}
+    timing = {
+        "cpu": ("8x1", 100.0, 4.0),
+        "metal": ("1x4", 50.0, 2.0),
+        "third": ("1x1", 70.0, 3.0),
+        "fourth": ("1x2", 60.0, 2.5),
+    }
     return {
         "id": "test",
         "machine_label": "test machine",
@@ -95,9 +100,35 @@ class PlotResultsTest(unittest.TestCase):
         texts = [t.text or "" for t in root.iter(f"{SVG}text")]
         self.assertIn("2.00× faster", texts)  # 100 ms -> 50 ms, and 4 ns -> 2 ns
 
+    def test_three_builds_get_three_series(self) -> None:
+        root = self._plot(["cpu", "metal", "third"])["push_rate_vs_grid.svg"]
+        classes = {c.get("class") for c in root.iter(f"{SVG}circle")}
+        self.assertTrue({"s0 ring", "s1 ring", "s2 ring"} <= classes, classes)
+
     def test_refuses_more_builds_than_validated_colours(self) -> None:
         with self.assertRaises(plots.PlotError):
-            self._plot(["cpu", "metal", "third"])
+            self._plot(["cpu", "metal", "third", "fourth"])
+
+    def test_one_push_rate_figure_per_sort_interval(self) -> None:
+        results = _results(["cpu", "metal"])
+        results["cases"]["lpi-sorted-24"] = {
+            "name": "lpi-sorted-24",
+            "deck": "lpi",
+            "nx": 24,
+            "ny": 24,
+            "nz": 24,
+            "sort_interval": 20,
+        }
+        results["summary"]["lpi-sorted-24"] = {b: _entry("8x1", 10.0, 1.0) for b in ["cpu", "metal"]}
+        (self.folder / "results.json").write_text(json.dumps(results))
+        figures = {p.name: ET.parse(p).getroot() for p in plots.plot_results(self.folder)}
+        self.assertIn("push_rate_vs_grid_sort20.svg", figures)
+        sorted_refs = [
+            c for c in figures["push_rate_vs_grid_sort20.svg"].iter(f"{SVG}circle") if c.get("class") == "ref"
+        ]
+        published = [c for c in figures["push_rate_vs_grid.svg"].iter(f"{SVG}circle") if c.get("class") == "ref"]
+        self.assertEqual(len(sorted_refs), 0)  # published rates are for unsorted runs only
+        self.assertGreater(len(published), 0)
 
 
 class HelpersTest(unittest.TestCase):

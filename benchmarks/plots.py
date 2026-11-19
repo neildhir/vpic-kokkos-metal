@@ -8,9 +8,12 @@ Each results folder gains a ``plots/`` directory with:
 
 - ``step_and_push.svg``: for the Harris (whole-step) cases, steady time per step
   and particle-push time per particle for every build, side by side.
-- ``push_rate_vs_grid.svg``: for the laser-plasma (LPI) sweep, particle pushes
-  per nanosecond against grid size for every build, with the published GPU
-  values from the config copy in the folder (``[published_push_rate]``).
+- ``push_rate_vs_grid.svg``: for the laser-plasma (LPI) sweep with sorting off,
+  particle pushes per nanosecond against grid size for every build, with the
+  published GPU values from the config copy in the folder
+  (``[published_push_rate]``), which were measured with sorting off too.
+- ``push_rate_vs_grid_sort<N>.svg``: the same for LPI cases sorted every N
+  steps (no published values).
 
 The figures follow the light/dark colour scheme of the viewer, carry a hover
 tooltip on every mark, and keep the legend below the axes. The numbers behind
@@ -53,8 +56,10 @@ LABEL_ROOM = 1.35  # bar axes extend this far past the longest whisker, for the 
 MARKER_RADIUS = 4.5
 LINE_WIDTH = 2
 
-# Light and dark tokens. Categorical slots 1-2 validated with validate_palette.js
-# (light on #fcfcfb, dark on #1a1a19): all checks pass.
+# Light and dark tokens. Categorical slots 1-3 validated all-pairs with
+# validate_palette.js (light on #fcfcfb, dark on #1a1a19): all checks pass; the
+# light aqua is below 3:1 contrast, so every series also carries visible labels
+# (line-end labels, speed-up labels on bars) and summary.md has the table.
 STYLE = f"""
 .root {{ font-family: {FONT}; }}
 .surface {{ fill: #fcfcfb; }}
@@ -67,6 +72,7 @@ STYLE = f"""
 .ref {{ fill: none; stroke: #52514e; stroke-width: 1.5; }}
 .s0 {{ fill: #2a78d6; stroke: #2a78d6; }}
 .s1 {{ fill: #eb6834; stroke: #eb6834; }}
+.s2 {{ fill: #1baf7a; stroke: #1baf7a; }}
 path.line, line.line {{ fill: none; stroke-width: {LINE_WIDTH}; }}  /* beats .sN in both modes */
 .ring {{ stroke: #fcfcfb; stroke-width: 2; }}
 @media (prefers-color-scheme: dark) {{
@@ -78,11 +84,12 @@ path.line, line.line {{ fill: none; stroke-width: {LINE_WIDTH}; }}  /* beats .sN
   .whisker, .ref {{ stroke: #c3c2b7; }}
   .s0 {{ fill: #3987e5; stroke: #3987e5; }}
   .s1 {{ fill: #d95926; stroke: #d95926; }}
+  .s2 {{ fill: #199e70; stroke: #199e70; }}
   .ring {{ stroke: #1a1a19; }}
 }}
 """
 
-MAX_SERIES = 2  # validated categorical slots; more builds need another palette check
+MAX_SERIES = 3  # validated categorical slots; more builds need another palette check
 
 
 class PlotError(Exception):
@@ -160,10 +167,13 @@ def plot_results(folder: Path) -> list[Path]:
     if harris:
         svg = step_and_push_figure(results, harris, builds, subtitle)
         written.append(_write(out_dir / "step_and_push.svg", svg))
-    if lpi:
-        published = load_published(folder / "config.toml")
-        svg = push_rate_figure(results, lpi, builds, published, subtitle)
-        written.append(_write(out_dir / "push_rate_vs_grid.svg", svg))
+    for sort_interval in sorted({int(c.get("sort_interval") or 0) for c in lpi}):
+        group = [c for c in lpi if int(c.get("sort_interval") or 0) == sort_interval]
+        # The published rates were measured with sorting off, so they only belong beside unsorted runs
+        published = load_published(folder / "config.toml") if sort_interval == 0 else []
+        svg = push_rate_figure(results, group, builds, published, subtitle, sort_interval)
+        name = "push_rate_vs_grid.svg" if sort_interval == 0 else f"push_rate_vs_grid_sort{sort_interval}.svg"
+        written.append(_write(out_dir / name, svg))
     if not written:
         raise PlotError("no cases to plot")
     return written
@@ -196,8 +206,12 @@ def push_rate_figure(
     builds: list[str],
     published: list[PublishedPoint],
     subtitle: str,
+    sort_interval: int = 0,
 ) -> str:
-    """Log-log lines of particle pushes per ns against grid points, with published GPU points."""
+    """Log-log lines of particle pushes per ns against grid points, with published GPU points.
+
+    ``sort_interval`` (steps between particle sorts, 0 for never) goes in the title.
+    """
     names = [c["name"] for c in cases]
     grid = [float(_grid_points(c)) for c in cases]
     series = []
@@ -220,7 +234,8 @@ def push_rate_figure(
     plot_h = PANEL_HEIGHT
     yscale = _LogScale(min(ys) / 1.5, max(ys) * 1.5, MARGIN_TOP + plot_h, MARGIN_TOP)
     height = MARGIN_TOP + plot_h + AXIS_BAND + LEGEND_ROW * 2
-    parts = _header("Laser-plasma benchmark: particle push rate vs grid size", subtitle, height)
+    sorting = "sorting off" if sort_interval == 0 else f"particles sorted every {sort_interval} steps"
+    parts = _header(f"Laser-plasma benchmark, {sorting}: particle push rate vs grid size", subtitle, height)
     parts += _log_grid(xscale, yscale, MARGIN_TOP, MARGIN_TOP + plot_h, "Grid points", "Particle pushes per ns")
     for s in series:
         pts = [(xscale(x), yscale(y)) for x, y in zip(grid, s.medians, strict=True)]
