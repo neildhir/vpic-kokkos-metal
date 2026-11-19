@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <string>
 #include <utility>
@@ -85,11 +86,18 @@ struct Wrapped {
   NSUInteger    offset;
 };
 
+// A push launched but not yet finished
+struct Launched {
+  NSMutableArray<id<MTLCommandBuffer>>* cbs = nil;
+  id<MTLBuffer> counters = nil;   // [0] movers, [1] overflow, [2] no neighbors, [3] crossers (experiment)
+  size_t np = 0;
+  double t_enter = 0, t_committed = 0;
+};
+
 struct Context {
   id<MTLDevice>               device = nil;
   id<MTLCommandQueue>         queue = nil;
   id<MTLComputePipelineState> push = nil;
-  id<MTLBuffer>               counters = nil;   // [0] movers, [1] overflow, [2] no neighbors, [3] crossers (experiment)
   id<MTLBuffer>               no_neighbors = nil;  // bound when VPIC has no neighbor table yet
   NSUInteger                  threads = 0;      // threads per threadgroup
   size_t                      chunk = 0;        // particles per command buffer
@@ -131,6 +139,13 @@ struct Context {
   bool compact_active = false;
   double   fields_gpu_seconds = 0;
   uint64_t field_calls = 0;
+
+  // Pushes launched and not yet finished (FIFO), their counter buffers, and
+  // other queued work to wait for (the compact-current unload)
+  std::deque<Launched> launched;
+  std::vector<id<MTLBuffer>> counter_pool;
+  NSMutableArray<id<MTLCommandBuffer>>* queued = nil;
+  double gpu_busy_until = 0;   // GPU end time of the last finished push (profile)
 };
 
 // Grow a scratch buffer to at least bytes (contents are not kept)
@@ -218,8 +233,6 @@ Context& context() {
     c.threads = std::min<NSUInteger>(want, c.push.maxTotalThreadsPerThreadgroup);
     c.threads = std::max<NSUInteger>(width, c.threads / width * width);
 
-    c.counters = [c.device newBufferWithLength:4 * sizeof(uint32_t)
-                                       options:MTLResourceStorageModeShared];
     c.no_neighbors = [c.device newBufferWithLength:6 * sizeof(int64_t)
                                            options:MTLResourceStorageModeShared];
 
@@ -372,11 +385,14 @@ bool vpic_metal_push_enabled() { return env_flag("VPIC_METAL_PUSH", true); }
 
 bool vpic_metal_push_check_enabled() { return env_flag("VPIC_METAL_PUSH_CHECK", false); }
 
-size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
-  if (a.np == 0) return 0;
+void vpic_metal_advance_p_launch(const vpic_metal_push_args& a) {
   const double t_enter = host_seconds();
   @autoreleasepool {
     Context& c = context();
+    Launched L;
+    L.np = a.np;
+    L.t_enter = t_enter;
+    if (a.np == 0) { c.launched.push_back(L); return; }
     if (a.max_nm > UINT32_MAX) fail("the mover list is larger than its 32-bit counter");
 
     const Wrapped buffers[] = {
@@ -391,11 +407,17 @@ size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
         wrap(c, a.copies, a.max_nm * 7 * sizeof(float), "the mover copies"),
         wrap(c, a.copies_i, a.max_nm * sizeof(int), "the mover copy cells"),
     };
-    uint32_t* counters = static_cast<uint32_t*>(c.counters.contents);
-    counters[0] = 0;
-    counters[1] = 0;
-    counters[2] = 0;
-    counters[3] = 0;
+    // Each push in flight has its own counters ([0] movers, [1] overflow,
+    // [2] no neighbors, [3] crossers): one buffer per launched push
+    const size_t slot = c.launched.size();
+    while (c.counter_pool.size() <= slot) {
+      id<MTLBuffer> b = [c.device newBufferWithLength:4 * sizeof(uint32_t) options:MTLResourceStorageModeShared];
+      if (b == nil) fail("could not allocate the push counters");
+      c.counter_pool.push_back(b);
+    }
+    L.counters = c.counter_pool[slot];
+    uint32_t* counters = static_cast<uint32_t*>(L.counters.contents);
+    for (int k = 0; k < 4; ++k) counters[k] = 0;
 
     vpic_metal_push_params P{};
     P.np = a.np;
@@ -411,20 +433,34 @@ size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
     if (c.compact_active && c.jacc_voxels != a.nvoxels)
       fail("the compact current array does not match the field array");
 
-    // One command buffer per chunk of particles, all queued before waiting;
-    // the mover counter carries over between them.
-    NSMutableArray<id<MTLCommandBuffer>>* all = [NSMutableArray array];
-    queue_particle_pass(c, all, c.push, a.np, "push", [&](id<MTLComputeCommandEncoder> enc, size_t first, size_t) {
+    // One command buffer per chunk of particles; the mover counter carries
+    // over between them. Command buffers on one queue run in order.
+    L.cbs = [NSMutableArray array];
+    id<MTLBuffer> counter_buffer = L.counters;
+    queue_particle_pass(c, L.cbs, c.push, a.np, "push", [&](id<MTLComputeCommandEncoder> enc, size_t first, size_t) {
       P.first = first;
       for (NSUInteger k = 0; k < 9; ++k)
         [enc setBuffer:buffers[k].buffer offset:buffers[k].offset atIndex:k];
       if (c.compact_active) [enc setBuffer:c.jacc offset:0 atIndex:3];   // currents go to the compact array
-      [enc setBuffer:c.counters offset:0 atIndex:9];
+      [enc setBuffer:counter_buffer offset:0 atIndex:9];
       [enc setBytes:&P length:sizeof(P) atIndex:10];
     });
-    const double t_committed = host_seconds();
-    const double gpu = finish(all, "push");
+    L.t_committed = host_seconds();
+    c.launched.push_back(L);
+  }
+}
+
+size_t vpic_metal_advance_p_finish() {
+  @autoreleasepool {
+    Context& c = context();
+    if (c.launched.empty()) fail("vpic_metal_advance_p_finish called with no push launched");
+    Launched L = c.launched.front();
+    c.launched.pop_front();
+    if (L.np == 0) return 0;
+    const double t_finish = host_seconds();
+    const double gpu = finish(L.cbs, "push");
     const double t_done = host_seconds();
+    const uint32_t* counters = static_cast<const uint32_t*>(L.counters.contents);
     if (counters[1]) fail("the mover list overflowed (max_nm too small for this species)");
     if (counters[2])
       fail("a particle left its cell before VPIC built the grid's neighbor table "
@@ -432,20 +468,32 @@ size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
 
     c.gpu_seconds += gpu;
     c.calls += 1;
-    c.particles += a.np;
-    const double start_wait = std::max(0.0, all.firstObject.GPUStartTime - t_committed);
-    const double wake = std::max(0.0, t_done - all.lastObject.GPUEndTime);
-    c.push_host_seconds += t_done - t_enter;
-    c.push_encode_seconds += t_committed - t_enter;
+    c.particles += L.np;
+    // Host time attributed to this push: its launch, plus its wait. When pushes
+    // are launched together, the GPU may start a push long after its commit
+    // because the previous one is running, so "wait for start" counts only
+    // time the GPU was idle after the commit.
+    const double start_wait = std::max(0.0, L.cbs.firstObject.GPUStartTime - std::max(L.t_committed, c.gpu_busy_until));
+    const double wake = std::max(0.0, t_done - L.cbs.lastObject.GPUEndTime);
+    c.gpu_busy_until = L.cbs.lastObject.GPUEndTime;
+    const double host = (L.t_committed - L.t_enter) + (t_done - t_finish);
+    c.push_host_seconds += host;
+    c.push_encode_seconds += L.t_committed - L.t_enter;
     c.push_start_wait_seconds += start_wait;
     c.push_wake_seconds += wake;
     if (c.profile)
       fprintf(stderr, "[vpic-metal] push %zu particles in %lu command buffer(s): %.3f ms GPU, %.3f ns/particle, %u movers, %u crossers; "
               "host %.3f ms (encode %.3f, wait for start %.3f, wake %.3f)\n",
-              a.np, (unsigned long)all.count, 1e3 * gpu, 1e9 * gpu / double(a.np), counters[0], counters[3],
-              1e3 * (t_done - t_enter), 1e3 * (t_committed - t_enter), 1e3 * start_wait, 1e3 * wake);
+              L.np, (unsigned long)L.cbs.count, 1e3 * gpu, 1e9 * gpu / double(L.np), counters[0], counters[3],
+              1e3 * host, 1e3 * (L.t_committed - L.t_enter), 1e3 * start_wait, 1e3 * wake);
     return counters[0];
   }
+}
+
+size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
+  if (!context().launched.empty()) fail("vpic_metal_advance_p called while pushes are in flight");
+  vpic_metal_advance_p_launch(a);
+  return vpic_metal_advance_p_finish();
 }
 
 bool vpic_metal_sort_enabled() { return env_flag("VPIC_METAL_SORT", true); }
@@ -706,6 +754,8 @@ void vpic_metal_clear_jf(const vpic_metal_field_args& a) {
   }
 }
 
+bool vpic_metal_batch_enabled() { return env_flag("VPIC_METAL_BATCH", true); }
+
 bool vpic_metal_compact_currents_enabled() { return env_flag("VPIC_METAL_COMPACT_J", true); }
 
 void vpic_metal_begin_compact_currents(size_t nvoxels) {
@@ -730,23 +780,51 @@ void vpic_metal_begin_compact_currents(size_t nvoxels) {
   }
 }
 
-void vpic_metal_flush_compact_currents(float* fields, size_t nvoxels, bool add) {
+namespace {
+// Queue the compact-current unload; wait for it unless queue_only
+void unload_compact_currents(Context& c, float* fields, size_t nvoxels, bool add, bool queue_only) {
+  if (!c.compact_active) return;
+  if (nvoxels != c.jacc_voxels) fail("the compact current array does not match the field array");
+  const Wrapped f = wrap(c, fields, nvoxels * 16 * sizeof(float), "the fields");
+  const uint32_t params[2] = {uint32_t(nvoxels), add ? 1u : 0u};
+  id<MTLCommandBuffer> cb = [c.queue commandBuffer];
+  cb.label = label_for(add ? "unload currents (add)" : "unload currents");
+  id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+  enc.label = cb.label;
+  [enc setComputePipelineState:c.unload];
+  [enc setBuffer:f.buffer offset:f.offset atIndex:0];
+  [enc setBuffer:c.jacc offset:0 atIndex:1];
+  [enc setBytes:params length:sizeof(params) atIndex:2];
+  [enc dispatchThreads:MTLSizeMake(nvoxels, 1, 1)
+      threadsPerThreadgroup:MTLSizeMake(std::min<NSUInteger>(256, c.unload.maxTotalThreadsPerThreadgroup), 1, 1)];
+  [enc endEncoding];
+  [cb commit];
+  if (c.queued == nil) c.queued = [NSMutableArray array];
+  [c.queued addObject:cb];
+  if (!queue_only) vpic_metal_wait();
+}
+}  // namespace
+
+void vpic_metal_wait() {
   @autoreleasepool {
     Context& c = context();
-    if (!c.compact_active) return;
-    if (nvoxels != c.jacc_voxels) fail("the compact current array does not match the field array");
-    const Wrapped f = wrap(c, fields, nvoxels * 16 * sizeof(float), "the fields");
-    const uint32_t params[2] = {uint32_t(nvoxels), add ? 1u : 0u};
-    field_kernel(c, c.unload, MTLSizeMake(nvoxels, 1, 1), add ? "unload currents (add)" : "unload currents",
-                 [&](id<MTLComputeCommandEncoder> enc) {
-      [enc setBuffer:f.buffer offset:f.offset atIndex:0];
-      [enc setBuffer:c.jacc offset:0 atIndex:1];
-      [enc setBytes:params length:sizeof(params) atIndex:2];
-    });
+    if (c.queued == nil || c.queued.count == 0) return;
+    const double gpu = finish(c.queued, "queued work");
+    c.fields_gpu_seconds += gpu;
+    c.field_calls += c.queued.count;
+    if (c.profile) fprintf(stderr, "[vpic-metal] queued work: %.3f ms GPU\n", 1e3 * gpu);
+    [c.queued removeAllObjects];
   }
 }
 
-void vpic_metal_end_compact_currents(float* fields, size_t nvoxels, bool add) {
-  vpic_metal_flush_compact_currents(fields, nvoxels, add);
-  context().compact_active = false;
+void vpic_metal_flush_compact_currents(float* fields, size_t nvoxels, bool add) {
+  @autoreleasepool { unload_compact_currents(context(), fields, nvoxels, add, false); }
+}
+
+void vpic_metal_end_compact_currents(float* fields, size_t nvoxels, bool add, bool queue_only) {
+  @autoreleasepool {
+    Context& c = context();
+    unload_compact_currents(c, fields, nvoxels, add, queue_only);
+    c.compact_active = false;
+  }
 }

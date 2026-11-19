@@ -1169,8 +1169,8 @@ warn_if_currents_underflow( const species_t* sp ) {
 }
 
 // Run the push on the GPU through Metal, on the species' own arrays
-static void
-advance_p_metal( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
+static vpic_metal_push_args
+metal_push_args( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
                  float qdt_2mc, float cdt_dx, float cdt_dy, float cdt_dz ) {
   const grid_t* g = sp->g;
   if( sp->k_p_d.stride(0)!=1 || ia->k_i_d.stride(0)!=INTERPOLATOR_VAR_COUNT ||
@@ -1212,10 +1212,36 @@ advance_p_metal( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
     ERROR(( "Interpolator or neighbor arrays smaller than the field array: "
             "%zu interpolators, %zu neighbors, %zu voxels",
             size_t(ia->k_i_d.extent(0)), size_t(g->k_neighbor_d.extent(0)), a.nvoxels ));
+  return a;
+}
 
+static void
+advance_p_metal( species_t* sp, interpolator_array_t* ia, field_array_t* fa,
+                 float qdt_2mc, float cdt_dx, float cdt_dy, float cdt_dz ) {
+  const vpic_metal_push_args a = metal_push_args( sp, ia, fa, qdt_2mc, cdt_dx, cdt_dy, cdt_dz );
   Kokkos::fence();   // the GPU reads and adds to arrays Kokkos kernels just wrote
   warn_if_currents_underflow( sp );
   sp->k_nm_d(0) = static_cast<k_atomic_count_t>( vpic_metal_advance_p( a ) );
+}
+
+// The Metal push in two halves for advance(), which launches every species'
+// push before finishing any, so the GPU runs them back to back with one wait
+void
+advance_p_metal_launch( species_t* sp, interpolator_array_t* ia, field_array_t* fa ) {
+  if( !sp || !ia || !fa || sp->g!=ia->g ) ERROR(( "Bad args" ));
+  const float qdt_2mc = (sp->q*sp->g->dt)/(2*sp->m*sp->g->cvac);
+  const float cdt_dx  = sp->g->cvac*sp->g->dt*sp->g->rdx;
+  const float cdt_dy  = sp->g->cvac*sp->g->dt*sp->g->rdy;
+  const float cdt_dz  = sp->g->cvac*sp->g->dt*sp->g->rdz;
+  const vpic_metal_push_args a = metal_push_args( sp, ia, fa, qdt_2mc, cdt_dx, cdt_dy, cdt_dz );
+  Kokkos::fence();
+  warn_if_currents_underflow( sp );
+  vpic_metal_advance_p_launch( a );
+}
+
+void
+advance_p_metal_finish( species_t* sp ) {
+  sp->k_nm_d(0) = static_cast<k_atomic_count_t>( vpic_metal_advance_p_finish() );
 }
 
 // Validation (VPIC_METAL_PUSH_CHECK=1): run the CPU push and the Metal push
@@ -1332,6 +1358,35 @@ advance_p_metal_checked( species_t* sp, interpolator_array_t* ia, field_array_t*
 }
 #endif
 
+// Copy the species' mover count and mover copies to the host, ready for
+// boundary_p_kokkos (the end of advance_p; advance() calls it after the
+// batched Metal pushes)
+void
+advance_p_copy_movers_to_host( species_t* sp ) {
+  // I need to know the number of movers that got populated so I can call the
+  // compress. Let's copy it back
+  Kokkos::deep_copy(sp->k_nm_h, sp->k_nm_d);
+  // TODO: which way round should this copy be?
+
+  //  int nm = sp->k_nm_h(0);
+
+  //  printf("nm = %d \n", nm);
+
+  // Copy particle mirror movers back so we have their data safe. Ready for
+  // boundary_p_kokkos
+  const size_t nm = sp->k_nm_h(0);
+  auto pc_d_subview  = Kokkos::subview(sp->k_pc_d,   std::make_pair(static_cast<size_t>(0), nm), Kokkos::ALL);
+  auto pci_d_subview = Kokkos::subview(sp->k_pc_i_d, std::make_pair(static_cast<size_t>(0), nm));
+  auto pc_h_subview  = Kokkos::subview(sp->k_pc_h,   std::make_pair(static_cast<size_t>(0), nm), Kokkos::ALL);
+  auto pci_h_subview = Kokkos::subview(sp->k_pc_i_h, std::make_pair(static_cast<size_t>(0), nm));
+
+  Kokkos::deep_copy(pc_h_subview, pc_d_subview);
+  Kokkos::deep_copy(pci_h_subview, pci_d_subview);
+  //  Kokkos::deep_copy(sp->k_pc_h, sp->k_pc_d);
+  //  Kokkos::deep_copy(sp->k_pc_i_h, sp->k_pc_i_d);
+
+}
+
 void
 advance_p( /**/  species_t            * RESTRICT sp,
 //           accumulator_array_t * RESTRICT aa,
@@ -1407,28 +1462,7 @@ advance_p( /**/  species_t            * RESTRICT sp,
   KOKKOS_TOC( advance_p, 1);
 
   KOKKOS_TIC();
-  // I need to know the number of movers that got populated so I can call the
-  // compress. Let's copy it back
-  Kokkos::deep_copy(sp->k_nm_h, sp->k_nm_d);
-  // TODO: which way round should this copy be?
-
-  //  int nm = sp->k_nm_h(0);
-
-  //  printf("nm = %d \n", nm);
-
-  // Copy particle mirror movers back so we have their data safe. Ready for
-  // boundary_p_kokkos
-  const size_t nm = sp->k_nm_h(0);
-  auto pc_d_subview  = Kokkos::subview(sp->k_pc_d,   std::make_pair(static_cast<size_t>(0), nm), Kokkos::ALL);
-  auto pci_d_subview = Kokkos::subview(sp->k_pc_i_d, std::make_pair(static_cast<size_t>(0), nm));
-  auto pc_h_subview  = Kokkos::subview(sp->k_pc_h,   std::make_pair(static_cast<size_t>(0), nm), Kokkos::ALL);
-  auto pci_h_subview = Kokkos::subview(sp->k_pc_i_h, std::make_pair(static_cast<size_t>(0), nm));
-
-  Kokkos::deep_copy(pc_h_subview, pc_d_subview);
-  Kokkos::deep_copy(pci_h_subview, pci_d_subview);
-  //  Kokkos::deep_copy(sp->k_pc_h, sp->k_pc_d);
-  //  Kokkos::deep_copy(sp->k_pc_i_h, sp->k_pc_i_d);
-
+  advance_p_copy_movers_to_host( sp );
   KOKKOS_TOC( PARTICLE_DATA_MOVEMENT, 1);
 }
 

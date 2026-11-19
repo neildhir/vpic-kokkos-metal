@@ -158,17 +158,36 @@ int vpic_simulation::advance(void)
   //TIC user_particle_collisions(); TOC( user_particle_collisions, 1 );
 
   // DEVICE function - Touches particles, particle movers, accumulators, interpolators
-  LIST_FOR_EACH( sp, species_list )
-  {
-      // Now Times internally
-      advance_p( sp, interpolator_array, field_array );
-  }
 #ifdef VPIC_ENABLE_METAL
-  if( metal_compact_j ) {
-    TIC vpic_metal_end_compact_currents( field_array->k_f_d.data(), field_array->k_f_d.extent(0),
-                                         !metal_compact_store ); TOC( clear_jf, 1 );
-  }
+  if( vpic_metal_push_enabled() && !vpic_metal_push_check_enabled() && vpic_metal_batch_enabled() ) {
+    // Batched Metal pushes: launch every species, queue the compact-current
+    // unload, then wait once, instead of a GPU round trip per call
+    KOKKOS_TIC();
+    LIST_FOR_EACH( sp, species_list ) advance_p_metal_launch( sp, interpolator_array, field_array );
+    if( metal_compact_j )
+      vpic_metal_end_compact_currents( field_array->k_f_d.data(), field_array->k_f_d.extent(0),
+                                       !metal_compact_store, true );
+    LIST_FOR_EACH( sp, species_list ) advance_p_metal_finish( sp );
+    vpic_metal_wait();
+    KOKKOS_TOC( advance_p, 1 );
+    KOKKOS_TIC();
+    LIST_FOR_EACH( sp, species_list ) advance_p_copy_movers_to_host( sp );
+    KOKKOS_TOC( PARTICLE_DATA_MOVEMENT, 1 );
+  } else
 #endif
+  {
+    LIST_FOR_EACH( sp, species_list )
+    {
+        // Now Times internally
+        advance_p( sp, interpolator_array, field_array );
+    }
+#ifdef VPIC_ENABLE_METAL
+    if( metal_compact_j ) {
+      TIC vpic_metal_end_compact_currents( field_array->k_f_d.data(), field_array->k_f_d.extent(0),
+                                           !metal_compact_store ); TOC( clear_jf, 1 );
+    }
+#endif
+  }
   //printf("Pushed\n");
 
   // Reduce accumulator contributions into the device array

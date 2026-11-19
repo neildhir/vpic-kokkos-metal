@@ -60,6 +60,17 @@ void vpic_metal_forget_arrays();
 // aborts the run.
 size_t vpic_metal_advance_p(const vpic_metal_push_args& args);
 
+// The same in two halves, so that several species' pushes run back to back
+// on the GPU with one wait: launch queues a push and returns at once; finish
+// waits for the oldest launched push and returns its mover count. Each
+// species' arrays must stay untouched between its launch and its finish.
+void   vpic_metal_advance_p_launch(const vpic_metal_push_args& args);
+size_t vpic_metal_advance_p_finish();
+
+// True unless VPIC_METAL_BATCH=0, which makes advance() push one species at
+// a time (each push waits for the GPU), for A/B comparisons.
+bool vpic_metal_batch_enabled();
+
 // Particle sort on the GPU: particles grouped by cell, cells in increasing
 // order (VPIC's StandardSortOrder), sorted in place.
 struct vpic_metal_sort_args {
@@ -160,6 +171,12 @@ void vpic_metal_clear_jf(const vpic_metal_field_args& args);
 bool vpic_metal_compact_currents_enabled();
 void vpic_metal_begin_compact_currents(size_t nvoxels);
 void vpic_metal_flush_compact_currents(float* fields, size_t nvoxels, bool add);
-void vpic_metal_end_compact_currents(float* fields, size_t nvoxels, bool add);
+// queue_only: queue the unload without waiting; call vpic_metal_wait before
+// the CPU touches the fields
+void vpic_metal_end_compact_currents(float* fields, size_t nvoxels, bool add, bool queue_only = false);
+
+// Wait for GPU work queued without waiting (vpic_metal_end_compact_currents
+// with queue_only). Aborts if any of it failed.
+void vpic_metal_wait();
 
 #endif // _vpic_metal_push_h_

@@ -302,6 +302,18 @@ sort_p( species_t * RESTRICT sp );
 
 // In advance_p.cxx
 
+// Copy a species' mover count and mover copies to the host after its push
+void
+advance_p_copy_movers_to_host( species_t * sp );
+
+#ifdef VPIC_ENABLE_METAL
+// The Metal push in two halves (see advance_p.cc and advance.cc)
+void
+advance_p_metal_launch( species_t * sp, interpolator_array_t * ia, field_array_t * fa );
+void
+advance_p_metal_finish( species_t * sp );
+#endif
+
 void
 advance_p( /**/  species_t            * RESTRICT sp,
                  interpolator_array_t * RESTRICT ia,
