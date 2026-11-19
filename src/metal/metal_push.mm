@@ -56,7 +56,7 @@ struct Context {
   id<MTLDevice>               device = nil;
   id<MTLCommandQueue>         queue = nil;
   id<MTLComputePipelineState> push = nil;
-  id<MTLBuffer>               counters = nil;   // [0] movers, [1] overflow, [2] no neighbors
+  id<MTLBuffer>               counters = nil;   // [0] movers, [1] overflow, [2] no neighbors, [3] crossers (experiment)
   id<MTLBuffer>               no_neighbors = nil;  // bound when VPIC has no neighbor table yet
   NSUInteger                  threads = 0;      // threads per threadgroup
   size_t                      chunk = 0;        // particles per command buffer
@@ -114,6 +114,16 @@ Context& context() {
     options.mathMode = fast ? MTLMathModeRelaxed : MTLMathModeSafe;
     options.mathFloatingPointFunctions = fast ? MTLMathFloatingPointFunctionsFast
                                               : MTLMathFloatingPointFunctionsPrecise;
+    // Performance experiments: VPIC_METAL_DEFINES=NAME[,NAME...] defines
+    // macros for the kernel source (see the VPIC_EXP_* blocks in
+    // advance_p.metal). Results of experiment builds are not physical.
+    if (const char* defs = getenv("VPIC_METAL_DEFINES"); defs && *defs) {
+      NSMutableDictionary<NSString*, NSObject*>* macros = [NSMutableDictionary dictionary];
+      for (NSString* name in [@(defs) componentsSeparatedByString:@","])
+        if (name.length) macros[name] = @1;
+      options.preprocessorMacros = macros;
+      fprintf(stderr, "[vpic-metal] EXPERIMENT kernel macros: %s\n", defs);
+    }
     NSError* error = nil;
     id<MTLLibrary> library =
         [c.device newLibraryWithSource:@(VPIC_METAL_SOURCE)
@@ -137,7 +147,7 @@ Context& context() {
     c.threads = std::min<NSUInteger>(256, c.push.maxTotalThreadsPerThreadgroup);
     c.threads = std::max<NSUInteger>(width, c.threads / width * width);
 
-    c.counters = [c.device newBufferWithLength:3 * sizeof(uint32_t)
+    c.counters = [c.device newBufferWithLength:4 * sizeof(uint32_t)
                                        options:MTLResourceStorageModeShared];
     c.no_neighbors = [c.device newBufferWithLength:6 * sizeof(int64_t)
                                            options:MTLResourceStorageModeShared];
@@ -151,8 +161,8 @@ Context& context() {
     }
     c.profile = env_flag("VPIC_METAL_PROFILE", false);
     if (c.profile) {
-      fprintf(stderr, "[vpic-metal] %s, %lu threads per threadgroup, %zu particles per command buffer\n",
-              c.device.name.UTF8String, (unsigned long)c.threads, c.chunk);
+      fprintf(stderr, "[vpic-metal] %s, %lu threads per threadgroup, %zu particles per command buffer, sources %.12s\n",
+              c.device.name.UTF8String, (unsigned long)c.threads, c.chunk, VPIC_METAL_SOURCES_SHA256);
       atexit([] {
         Context& c = context();
         if (c.particles)
@@ -223,6 +233,7 @@ size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
     counters[0] = 0;
     counters[1] = 0;
     counters[2] = 0;
+    counters[3] = 0;
 
     vpic_metal_push_params P{};
     P.np = a.np;
@@ -275,8 +286,8 @@ size_t vpic_metal_advance_p(const vpic_metal_push_args& a) {
     c.calls += 1;
     c.particles += a.np;
     if (c.profile)
-      fprintf(stderr, "[vpic-metal] push %zu particles in %lu command buffer(s): %.3f ms GPU, %.3f ns/particle, %u movers\n",
-              a.np, (unsigned long)all.count, 1e3 * gpu, 1e9 * gpu / double(a.np), counters[0]);
+      fprintf(stderr, "[vpic-metal] push %zu particles in %lu command buffer(s): %.3f ms GPU, %.3f ns/particle, %u movers, %u crossers\n",
+              a.np, (unsigned long)all.count, 1e3 * gpu, 1e9 * gpu / double(a.np), counters[0], counters[3]);
     return counters[0];
   }
 }

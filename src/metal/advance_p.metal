@@ -104,6 +104,34 @@ inline void scatter_currents(device atomic_float* f, int ii, thread const EdgeCu
   add_current(f, axy, JFZ, e.j[11]);
 }
 
+// Performance experiments (VPIC_METAL_DEFINES, see metal_push.mm); none is
+// defined in normal runs, and results with any of them are not physical:
+//   VPIC_EXP_SKIP_INCELL_DEPOSIT  no current from particles that stay in their cell
+//   VPIC_EXP_SKIP_MOVE_DEPOSIT    no current from move_p (cell crossers)
+//   VPIC_EXP_MOVE_PLAIN_ADD       move_p adds current without atomics (racy)
+//   VPIC_EXP_COUNT_CROSSERS       count particles that leave their cell (counters[3])
+inline void scatter_move_currents(device atomic_float* f, int ii, thread const EdgeCurrents& e,
+                                  constant PushParams& P) {
+#if defined(VPIC_EXP_SKIP_MOVE_DEPOSIT)
+  return;
+#elif defined(VPIC_EXP_MOVE_PLAIN_ADD)
+  device float* g = reinterpret_cast<device float*>(f);
+  int iii = ii;
+  const int zi = iii / ((P.nx + 2) * (P.ny + 2));
+  iii -= zi * (P.nx + 2) * (P.ny + 2);
+  const int yi = iii / (P.nx + 2);
+  const int xi = iii - yi * (P.nx + 2);
+  const int v[12] = {ii, voxel(xi, yi + 1, zi, P.nx, P.ny), voxel(xi, yi, zi + 1, P.nx, P.ny),
+                     voxel(xi, yi + 1, zi + 1, P.nx, P.ny), ii, voxel(xi, yi, zi + 1, P.nx, P.ny),
+                     voxel(xi + 1, yi, zi, P.nx, P.ny), voxel(xi + 1, yi, zi + 1, P.nx, P.ny), ii,
+                     voxel(xi + 1, yi, zi, P.nx, P.ny), voxel(xi, yi + 1, zi, P.nx, P.ny),
+                     voxel(xi + 1, yi + 1, zi, P.nx, P.ny)};
+  for (int k = 0; k < 12; ++k) g[ulong(v[k]) * FIELD_VARS + JFX + ulong(k / 4)] += e.j[k];
+#else
+  scatter_currents(f, ii, e, P);
+#endif
+}
+
 // Move a particle that leaves its cell, streak by streak, depositing current
 // along the way (move_p_kokkos). Returns true if the particle hit a boundary
 // this rank cannot handle and must go on the mover list; disp then holds the
@@ -140,7 +168,7 @@ inline bool move_p(device float* p, device int* pidx, ulong i,
     s_mid  += s_disp;
     const float v5 = q * s_disp.x * s_disp.y * s_disp.z * (1.f / 3.f);
     const EdgeCurrents e = edge_currents(s_mid, s_disp, q, v5, P);
-    scatter_currents(f, ii, e, P);
+    scatter_move_currents(f, ii, e, P);
 
     disp -= s_disp;                 // Remaining displacement
     pos  += s_disp + s_disp;        // New particle offset
@@ -308,7 +336,17 @@ kernel void advance_p(device float*         p         [[buffer(0)]],
     }
   }
 
+#if defined(VPIC_EXP_SKIP_INCELL_DEPOSIT)
+  deposit_in_cell(f, ii, e, false, lane, P);
+#else
   deposit_in_cell(f, ii, e, valid && inbnds, lane, P);
+#endif
+#if defined(VPIC_EXP_COUNT_CROSSERS)
+  {
+    const uint crossers = simd_sum((valid && !inbnds) ? 1u : 0u);
+    if (simd_is_first() && crossers) atomic_fetch_add_explicit(&counters[3], crossers, memory_order_relaxed);
+  }
+#endif
   if (!valid || inbnds) return;
 
   // The particle leaves its cell
